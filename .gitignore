@@ -1,0 +1,16 @@
+node_modules
+dist
+dist-ssr
+*.local
+.DS_Store
+.idea
+*.log
+
+# Editor — keep shared workspace config, ignore per-user state
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+
+# Claude Code per-user settings
+.claude/
