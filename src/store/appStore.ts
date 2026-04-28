@@ -69,7 +69,7 @@ function withClass(state: AppState, id: ClassId, mutate: (c: ClassRoom) => Class
 
 export const useAppStore = create<AppStore>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       classes: [],
       customShapes: [],
       activeClassId: null,
