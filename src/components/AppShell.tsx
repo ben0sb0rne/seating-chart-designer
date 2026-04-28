@@ -26,7 +26,7 @@ export default function AppShell() {
         </div>
         <ImportExportMenu />
       </header>
-      <main className="min-h-0 flex-1 overflow-auto">
+      <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <Outlet />
       </main>
     </div>
