@@ -80,9 +80,9 @@ function migrateV3toV4(persisted: unknown): AppState {
         width: (room.width as number) ?? 1000,
         height: (room.height as number) ?? 700,
         frontWall: (room.frontWall as string) ?? "top",
-        desks,
+        desks: desks as unknown[],
       },
-    } as ClassRoom;
+    } as unknown as ClassRoom;
   });
   return {
     classes: migratedClasses,
