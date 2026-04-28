@@ -80,8 +80,11 @@ export function assign(input: AssignInput): AssignResult {
     return constrained
       .map((seat) => {
         let score = 0;
-        // Avoid using front-row seats for students who don't need them.
-        if (!student.needsFrontRow && frontRowSeatIds.has(seat)) score += 50;
+        // Front-row seats are PRIORITY fill: front-row-flagged students get
+        // them first (handled by ordering), then non-front-row students prefer
+        // them over regular seats — so empty seats end up in the back, not
+        // up front where the teacher is looking.
+        if (!student.needsFrontRow && frontRowSeatIds.has(seat)) score -= 50;
         // Recency penalty: sum of recent-pair weights with whoever already sits in adjacent seats.
         const neighbors = adjBySeat.get(seat) ?? new Set();
         for (const n of neighbors) {

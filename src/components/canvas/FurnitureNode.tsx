@@ -9,6 +9,7 @@ interface Props {
   furniture: Furniture;
   selected: boolean;
   onSelect: (additive: boolean) => void;
+  onDragStart: (id: string) => void;
   onDragMove: (id: string, x: number, y: number) => { x: number; y: number };
   onDragEnd: () => void;
   classId: ClassId;
@@ -23,6 +24,7 @@ export default function FurnitureNode({
   furniture,
   selected,
   onSelect,
+  onDragStart,
   onDragMove,
   onDragEnd,
   classId,
@@ -56,6 +58,7 @@ export default function FurnitureNode({
         e.cancelBubble = true;
         onSelect(false);
       }}
+      onDragStart={() => onDragStart(furniture.id)}
       onDragMove={(e) => {
         const node = e.target;
         const snapped = onDragMove(furniture.id, node.x(), node.y());
@@ -197,16 +200,6 @@ function FurnitureShape({
               ctx.closePath();
               ctx.fillStrokeShape(shape);
             }}
-          />
-          <Text
-            text="Door"
-            x={0}
-            y={h - 14}
-            width={w}
-            align="center"
-            fontSize={9}
-            fill="#475569"
-            listening={false}
           />
         </>
       );

@@ -16,6 +16,7 @@ import FurnitureNode from "./FurnitureNode";
 import SeatPicker from "./SeatPicker";
 import { snapPosition, type Guide, GRID } from "@/lib/snap";
 import { shouldKeepRatio } from "@/lib/shapes";
+import { useAppStore } from "@/store/appStore";
 import Icon, { type IconName } from "@/components/Icon";
 
 function frontWallLine(wall: Wall, w: number, h: number): number[] {
@@ -58,9 +59,7 @@ interface Props {
   assignments: Record<SeatId, StudentId>;
   onAssignSeat: (seatId: SeatId, studentId: StudentId | null) => void;
   classId: ClassId;
-  /** When true: drag/resize/rotate are disabled, and seat assignment still works. */
   locked: boolean;
-  /** When true: render a faint dot grid behind the room. */
   showGrid: boolean;
 }
 
@@ -69,6 +68,12 @@ interface Marquee {
   y1: number;
   x2: number;
   y2: number;
+}
+
+interface DragSession {
+  draggedId: string;
+  /** Starting positions for every selected item at the moment drag began. */
+  initialPositions: Map<string, { x: number; y: number }>;
 }
 
 const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
@@ -90,29 +95,44 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
   const layerRef = useRef<Konva.Layer>(null);
   const transformerRef = useRef<Konva.Transformer>(null);
   const nodeRefs = useRef(new Map<string, Konva.Group>());
+  const dragSession = useRef<DragSession | null>(null);
   useImperativeHandle(ref, () => stageRef.current!, []);
+
+  const updateDesk = useAppStore((s) => s.updateDesk);
+  const updateFurniture = useAppStore((s) => s.updateFurniture);
 
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [guides, setGuides] = useState<Guide[]>([]);
   const [picker, setPicker] = useState<{ seatId: SeatId; x: number; y: number } | null>(null);
   const [marquee, setMarquee] = useState<Marquee | null>(null);
+  // Live shift-key tracking — when held, rotation snaps aggressively to 45°.
+  const [shiftHeld, setShiftHeld] = useState(false);
+
+  useEffect(() => {
+    function onShiftChange(e: KeyboardEvent) {
+      setShiftHeld(e.shiftKey);
+    }
+    window.addEventListener("keydown", onShiftChange);
+    window.addEventListener("keyup", onShiftChange);
+    return () => {
+      window.removeEventListener("keydown", onShiftChange);
+      window.removeEventListener("keyup", onShiftChange);
+    };
+  }, []);
 
   const registerNode = useCallback((id: string, node: Konva.Group | null) => {
     if (node) nodeRefs.current.set(id, node);
     else nodeRefs.current.delete(id);
   }, []);
 
-  // Compute keepRatio for the unified Transformer based on the (single)
-  // selected item's kind, if any.
   const transformerKeepRatio = useMemo(() => {
     if (selectedItemIds.length !== 1) return false;
     const id = selectedItemIds[0];
     const desk = room.desks.find((d) => d.id === id);
     if (desk) return shouldKeepRatio(desk.kind);
-    return false; // furniture is never ratio-locked
+    return false;
   }, [selectedItemIds, room.desks]);
 
-  // Attach the Transformer to whichever nodes are currently selected.
   useEffect(() => {
     const tr = transformerRef.current;
     if (!tr) return;
@@ -205,6 +225,22 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
     setMarquee(null);
   }
 
+  function handleItemDragStart(itemId: string) {
+    // Record starting positions for every selected item so multi-drag can
+    // apply a single delta to all of them.
+    const positions = new Map<string, { x: number; y: number }>();
+    if (selectedItemIds.includes(itemId)) {
+      for (const id of selectedItemIds) {
+        const node = nodeRefs.current.get(id);
+        if (node) positions.set(id, { x: node.x(), y: node.y() });
+      }
+    } else {
+      const node = nodeRefs.current.get(itemId);
+      if (node) positions.set(itemId, { x: node.x(), y: node.y() });
+    }
+    dragSession.current = { draggedId: itemId, initialPositions: positions };
+  }
+
   function snapItemDrag(itemId: string, x: number, y: number) {
     const allItems = [
       ...room.desks.map((d) => ({ id: d.id, x: d.x, y: d.y, width: d.width, height: d.height })),
@@ -214,13 +250,52 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
     if (!me) return { x, y };
     const result = snapPosition({ ...me, x, y }, x, y, allItems);
     setGuides(result.guides);
+
+    // Multi-drag: apply the same delta to all other selected items live so
+    // they visually move together.
+    const session = dragSession.current;
+    if (session && session.initialPositions.size > 1) {
+      const initial = session.initialPositions.get(itemId);
+      if (initial) {
+        const dx = result.x - initial.x;
+        const dy = result.y - initial.y;
+        for (const [id, pos] of session.initialPositions) {
+          if (id === itemId) continue;
+          const node = nodeRefs.current.get(id);
+          if (node) {
+            node.x(pos.x + dx);
+            node.y(pos.y + dy);
+          }
+        }
+      }
+    }
+
     return { x: result.x, y: result.y };
   }
 
-  // Build dot-grid points (only when showGrid is true).
+  function handleItemDragEnd() {
+    setGuides([]);
+    // Persist positions for all siblings that moved during multi-drag.
+    const session = dragSession.current;
+    if (session && session.initialPositions.size > 1) {
+      for (const [id, initial] of session.initialPositions) {
+        if (id === session.draggedId) continue; // dragged item updates itself
+        const node = nodeRefs.current.get(id);
+        if (!node) continue;
+        const finalX = node.x();
+        const finalY = node.y();
+        if (finalX === initial.x && finalY === initial.y) continue;
+        const isDesk = room.desks.some((d) => d.id === id);
+        if (isDesk) updateDesk(classId, id, { x: finalX, y: finalY });
+        else updateFurniture(classId, id, { x: finalX, y: finalY });
+      }
+    }
+    dragSession.current = null;
+  }
+
   const gridDots = useMemo(() => {
     if (!showGrid) return null;
-    const step = GRID * 4; // dot every 4 grid units = 40 px
+    const step = GRID * 4;
     const dots: { x: number; y: number }[] = [];
     for (let x = step; x < room.width; x += step) {
       for (let y = step; y < room.height; y += step) {
@@ -283,8 +358,9 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
               onSelect={(additive) => handleSelectItem(f.id, additive)}
               registerNode={registerNode}
               draggable={!locked}
+              onDragStart={(id) => handleItemDragStart(id)}
               onDragMove={(id, x, y) => snapItemDrag(id, x, y)}
-              onDragEnd={() => setGuides([])}
+              onDragEnd={handleItemDragEnd}
               classId={classId}
             />
           ))}
@@ -303,20 +379,23 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
                 const rect = containerRef.current?.getBoundingClientRect();
                 setPicker({ seatId, x: (rect?.left ?? 0) + x, y: (rect?.top ?? 0) + y });
               }}
+              onDragStart={(id) => handleItemDragStart(id)}
               onDragMove={(id, x, y) => snapItemDrag(id, x, y)}
-              onDragEnd={() => setGuides([])}
+              onDragEnd={handleItemDragEnd}
               classId={classId}
             />
           ))}
 
-          {/* Single shared Transformer for any/all selected items. */}
+          {/* Hold Shift to snap rotation aggressively to every 45°.
+              Otherwise the existing 5° tolerance keeps cardinal angles smooth
+              without forcing them. */}
           <Transformer
             ref={transformerRef}
             rotateEnabled={!locked}
             resizeEnabled={!locked}
             keepRatio={transformerKeepRatio}
             rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
-            rotationSnapTolerance={5}
+            rotationSnapTolerance={shiftHeld ? 23 : 5}
             borderStroke="#0284c7"
             anchorStroke="#0284c7"
             anchorFill="#ffffff"

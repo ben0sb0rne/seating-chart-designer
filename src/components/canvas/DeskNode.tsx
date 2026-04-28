@@ -11,6 +11,7 @@ interface Props {
   students: Student[];
   assignments: Record<SeatId, StudentId>;
   onSeatClick: (seatId: SeatId, screenX: number, screenY: number) => void;
+  onDragStart: (deskId: string) => void;
   onDragMove: (deskId: string, x: number, y: number) => { x: number; y: number };
   onDragEnd: () => void;
   classId: ClassId;
@@ -20,6 +21,8 @@ interface Props {
 
 const NAME_FONT_SIZE = 13;
 const NAME_BOX_WIDTH = 88;
+/** Tall enough for two wrapped lines (with verticalAlign="middle" they stay centered on the seat). */
+const NAME_BOX_HEIGHT = NAME_FONT_SIZE * 2.4;
 const SEAT_DOT_RADIUS = 8;
 const STROKE = "#334155";
 const STROKE_SELECTED = "#0284c7";
@@ -36,6 +39,7 @@ export default function DeskNode({
   students,
   assignments,
   onSeatClick,
+  onDragStart,
   onDragMove,
   onDragEnd,
   classId,
@@ -78,6 +82,7 @@ export default function DeskNode({
         e.cancelBubble = true;
         setDeskFrontRow(classId, desk.id, !allFront);
       }}
+      onDragStart={() => onDragStart(desk.id)}
       onDragMove={(e) => {
         const node = e.target;
         const snapped = onDragMove(desk.id, node.x(), node.y());
@@ -166,9 +171,11 @@ export default function DeskNode({
                 fontStyle="bold"
                 fill="#0f172a"
                 width={NAME_BOX_WIDTH}
+                height={NAME_BOX_HEIGHT}
                 align="center"
+                verticalAlign="middle"
                 offsetX={NAME_BOX_WIDTH / 2}
-                offsetY={NAME_FONT_SIZE / 2}
+                offsetY={NAME_BOX_HEIGHT / 2}
                 listening
               />
             )}
