@@ -42,17 +42,27 @@ interface Props {
   classId: ClassId;
 }
 
+interface Marquee {
+  /** Both points in room coordinates. */
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+}
+
 const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
   { room, selectedDeskIds, onSelectionChange, students, assignments, onAssignSeat, classId },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
+  const layerRef = useRef<Konva.Layer>(null);
   useImperativeHandle(ref, () => stageRef.current!, []);
 
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [guides, setGuides] = useState<Guide[]>([]);
   const [picker, setPicker] = useState<{ seatId: SeatId; x: number; y: number } | null>(null);
+  const [marquee, setMarquee] = useState<Marquee | null>(null);
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -74,10 +84,15 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
   const offsetX = (size.w - room.width * safeScale) / 2;
   const offsetY = (size.h - room.height * safeScale) / 2;
 
-  function handleStageClick(e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) {
-    if (e.target === e.target.getStage() || e.target.attrs.id === "room-bg") {
-      onSelectionChange([]);
-    }
+  /** Translate the current pointer's stage-coords into room coordinates. */
+  function pointerToRoom(): { x: number; y: number } | null {
+    const layer = layerRef.current;
+    const stage = stageRef.current;
+    if (!layer || !stage) return null;
+    const point = stage.getPointerPosition();
+    if (!point) return null;
+    const transform = layer.getAbsoluteTransform().copy().invert();
+    return transform.point(point);
   }
 
   function handleSelectDesk(deskId: string, additive: boolean) {
@@ -92,16 +107,52 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
     }
   }
 
+  function handleStagePointerDown(e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) {
+    // Marquee only starts when the gesture begins on empty room background.
+    if (e.target !== e.target.getStage() && e.target.attrs.id !== "room-bg") return;
+    const pt = pointerToRoom();
+    if (!pt) return;
+    setMarquee({ x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y });
+    onSelectionChange([]); // start fresh; the marquee will populate it as it grows
+  }
+
+  function handleStagePointerMove() {
+    if (!marquee) return;
+    const pt = pointerToRoom();
+    if (!pt) return;
+    const next = { ...marquee, x2: pt.x, y2: pt.y };
+    setMarquee(next);
+    // Live-update selection.
+    const minX = Math.min(next.x1, next.x2);
+    const maxX = Math.max(next.x1, next.x2);
+    const minY = Math.min(next.y1, next.y2);
+    const maxY = Math.max(next.y1, next.y2);
+    const inside = room.desks
+      .filter((d) =>
+        d.x + d.width >= minX && d.x <= maxX && d.y + d.height >= minY && d.y <= maxY,
+      )
+      .map((d) => d.id);
+    onSelectionChange(inside);
+  }
+
+  function handleStagePointerUp() {
+    setMarquee(null);
+  }
+
   return (
     <div ref={containerRef} className="relative min-h-0 flex-1 bg-slate-100" style={{ touchAction: "none" }}>
       <Stage
         ref={stageRef}
         width={size.w}
         height={size.h}
-        onMouseDown={handleStageClick}
-        onTouchStart={handleStageClick}
+        onMouseDown={handleStagePointerDown}
+        onTouchStart={handleStagePointerDown}
+        onMouseMove={handleStagePointerMove}
+        onTouchMove={handleStagePointerMove}
+        onMouseUp={handleStagePointerUp}
+        onTouchEnd={handleStagePointerUp}
       >
-        <Layer x={offsetX} y={offsetY} scaleX={safeScale} scaleY={safeScale}>
+        <Layer ref={layerRef} x={offsetX} y={offsetY} scaleX={safeScale} scaleY={safeScale}>
           <Rect
             id="room-bg"
             x={0}
@@ -164,6 +215,20 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
                 listening={false}
               />
             ),
+          )}
+
+          {marquee && (
+            <Rect
+              x={Math.min(marquee.x1, marquee.x2)}
+              y={Math.min(marquee.y1, marquee.y2)}
+              width={Math.abs(marquee.x2 - marquee.x1)}
+              height={Math.abs(marquee.y2 - marquee.y1)}
+              fill="rgba(2, 132, 199, 0.12)"
+              stroke="#0284c7"
+              strokeWidth={1 / safeScale}
+              dash={[4 / safeScale, 3 / safeScale]}
+              listening={false}
+            />
           )}
         </Layer>
       </Stage>

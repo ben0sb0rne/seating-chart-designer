@@ -18,6 +18,7 @@ export default function RoomDesigner() {
   const klass = useAppStore((s) => (id ? s.classes.find((c) => c.id === id) : undefined));
   const addDesk = useAppStore((s) => s.addDesk);
   const addDesks = useAppStore((s) => s.addDesks);
+  const updateDesk = useAppStore((s) => s.updateDesk);
   const removeDesks = useAppStore((s) => s.removeDesks);
   const updateRoom = useAppStore((s) => s.updateRoom);
   const saveArrangement = useAppStore((s) => s.saveArrangement);
@@ -82,6 +83,9 @@ export default function RoomDesigner() {
         const cloned = selected.map((d) => cloneDeskWithFreshIds(d, PASTE_OFFSET, PASTE_OFFSET));
         addDesks(klass.id, cloned);
         setSelectedDeskIds(cloned.map((d) => d.id));
+      } else if (mod && e.key.toLowerCase() === "a" && klass) {
+        e.preventDefault();
+        setSelectedDeskIds(klass.room.desks.map((d) => d.id));
       }
     }
     window.addEventListener("keydown", onKey);
@@ -142,6 +146,24 @@ export default function RoomDesigner() {
     exportStageAsJpg(stageRef.current, `${klass.name.replace(/\s+/g, "_")}_${date}`);
   }
 
+  function handleAlignVertical() {
+    if (!klass || selectedDeskIds.length < 2) return;
+    const selected = klass.room.desks.filter((d) => selectedDeskIds.includes(d.id));
+    const targetX = Math.min(...selected.map((d) => d.x));
+    for (const d of selected) {
+      if (d.x !== targetX) updateDesk(klass.id, d.id, { x: targetX });
+    }
+  }
+
+  function handleAlignHorizontal() {
+    if (!klass || selectedDeskIds.length < 2) return;
+    const selected = klass.room.desks.filter((d) => selectedDeskIds.includes(d.id));
+    const targetY = Math.min(...selected.map((d) => d.y));
+    for (const d of selected) {
+      if (d.y !== targetY) updateDesk(klass.id, d.id, { y: targetY });
+    }
+  }
+
   function handleAssignSeat(seatId: SeatId, studentId: StudentId | null) {
     setAssignments((prev) => {
       const next = { ...prev };
@@ -159,6 +181,9 @@ export default function RoomDesigner() {
         onOpenMulti={handleOpenMulti}
         room={klass.room}
         onUpdateRoom={(patch) => updateRoom(klass.id, patch)}
+        selectionSize={selectedDeskIds.length}
+        onAlignVertical={handleAlignVertical}
+        onAlignHorizontal={handleAlignHorizontal}
         onRandomize={handleRandomize}
         onSave={handleSaveArrangement}
         onExportJpg={handleExportJpg}

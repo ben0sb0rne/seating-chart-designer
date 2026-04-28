@@ -231,7 +231,6 @@ function DeskShapeRenderer({
           cornerRadius={6}
         />
       );
-    case "single-circle":
     case "multi-circle":
       return (
         <Circle

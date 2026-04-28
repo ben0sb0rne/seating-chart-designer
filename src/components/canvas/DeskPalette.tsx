@@ -7,6 +7,9 @@ interface Props {
   onOpenMulti: (kind: DeskKind) => void;
   room: Room;
   onUpdateRoom: (patch: Partial<Room>) => void;
+  selectionSize: number;
+  onAlignVertical: () => void;
+  onAlignHorizontal: () => void;
   onRandomize: () => void;
   onSave: () => void;
   onExportJpg: () => void;
@@ -20,7 +23,6 @@ interface PaletteItem {
 const SINGLE_ITEMS: PaletteItem[] = [
   { kind: "single-rect", label: "Rectangle desk" },
   { kind: "single-triangle", label: "Triangle desk" },
-  { kind: "single-circle", label: "Circle desk" },
 ];
 
 const MULTI_ITEMS: PaletteItem[] = [
@@ -34,11 +36,15 @@ export default function DeskPalette({
   onOpenMulti,
   room,
   onUpdateRoom,
+  selectionSize,
+  onAlignVertical,
+  onAlignHorizontal,
   onRandomize,
   onSave,
   onExportJpg,
 }: Props) {
   const [roomOptsOpen, setRoomOptsOpen] = useState(false);
+  const canAlign = selectionSize >= 2;
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
@@ -75,6 +81,33 @@ export default function DeskPalette({
             </li>
           ))}
         </ul>
+
+        <div className="mb-2 flex items-center justify-between">
+          <span className="label">Align selected</span>
+          <span className="text-[10px] text-ink-muted">
+            {selectionSize} desk{selectionSize === 1 ? "" : "s"}
+          </span>
+        </div>
+        <div className="mb-5 grid grid-cols-2 gap-1">
+          <button
+            className="btn-secondary justify-center"
+            onClick={onAlignVertical}
+            disabled={!canAlign}
+            title="Align selected desks to the same X (line them up vertically)"
+          >
+            <AlignIcon orientation="vertical" />
+            <span className="ml-1.5 text-xs">Vertical</span>
+          </button>
+          <button
+            className="btn-secondary justify-center"
+            onClick={onAlignHorizontal}
+            disabled={!canAlign}
+            title="Align selected desks to the same Y (line them up horizontally)"
+          >
+            <AlignIcon orientation="horizontal" />
+            <span className="ml-1.5 text-xs">Horizontal</span>
+          </button>
+        </div>
 
         <button
           className="flex w-full items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-ink-muted hover:bg-slate-100"
@@ -170,27 +203,47 @@ function NumberField({
   );
 }
 
+function AlignIcon({ orientation }: { orientation: "vertical" | "horizontal" }) {
+  const stroke = "#475569";
+  if (orientation === "vertical") {
+    // Three small rects stacked, all left-aligned (same X)
+    return (
+      <svg width={16} height={16} viewBox="0 0 20 20" aria-hidden>
+        <line x1="3" y1="2" x2="3" y2="18" stroke={stroke} strokeWidth="1.5" strokeDasharray="2 2" />
+        <rect x="3" y="3" width="11" height="3" fill="#e2e8f0" stroke={stroke} />
+        <rect x="3" y="8.5" width="14" height="3" fill="#e2e8f0" stroke={stroke} />
+        <rect x="3" y="14" width="9" height="3" fill="#e2e8f0" stroke={stroke} />
+      </svg>
+    );
+  }
+  // horizontal: three small rects in a row, all top-aligned (same Y)
+  return (
+    <svg width={16} height={16} viewBox="0 0 20 20" aria-hidden>
+      <line x1="2" y1="3" x2="18" y2="3" stroke={stroke} strokeWidth="1.5" strokeDasharray="2 2" />
+      <rect x="3" y="3" width="3" height="11" fill="#e2e8f0" stroke={stroke} />
+      <rect x="8.5" y="3" width="3" height="14" fill="#e2e8f0" stroke={stroke} />
+      <rect x="14" y="3" width="3" height="9" fill="#e2e8f0" stroke={stroke} />
+    </svg>
+  );
+}
+
 function ShapeIcon({ kind }: { kind: DeskKind }) {
   const stroke = "#475569";
   const fill = "#e2e8f0";
   const size = 18;
   switch (kind) {
     case "single-rect":
+      // Landscape 4:3 rectangle
       return (
         <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
-          <rect x="4" y="6" width="12" height="8" fill={fill} stroke={stroke} rx="1" />
+          <rect x="2" y="6" width="16" height="8" fill={fill} stroke={stroke} rx="1" />
         </svg>
       );
     case "single-triangle":
+      // Squashed isoceles triangle (wider than tall)
       return (
         <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
-          <polygon points="10,3 17,16 3,16" fill={fill} stroke={stroke} strokeLinejoin="round" />
-        </svg>
-      );
-    case "single-circle":
-      return (
-        <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
-          <circle cx="10" cy="10" r="6" fill={fill} stroke={stroke} />
+          <polygon points="10,6 18,14 2,14" fill={fill} stroke={stroke} strokeLinejoin="round" />
         </svg>
       );
     case "multi-rect":

@@ -68,15 +68,18 @@ export default function History() {
 function Thumbnail({ klass, arrangement }: { klass: ClassRoom; arrangement: Arrangement }) {
   const w = klass.room.width;
   const h = klass.room.height;
+  const frontWall = klass.room.frontWall ?? "top";
+  const frontLine =
+    frontWall === "top" ? { x1: 0, y1: 0, x2: w, y2: 0 } :
+    frontWall === "right" ? { x1: w, y1: 0, x2: w, y2: h } :
+    frontWall === "bottom" ? { x1: 0, y1: h, x2: w, y2: h } :
+    { x1: 0, y1: 0, x2: 0, y2: h };
   return (
     <svg viewBox={`0 0 ${w} ${h}`} className="h-full w-full">
       <rect x={0} y={0} width={w} height={h} fill="#fafaf7" />
-      <line x1={0} y1={0} x2={w} y2={0} stroke="#0f172a" strokeWidth={6} strokeDasharray="14 8" />
+      <line {...frontLine} stroke="#0f172a" strokeWidth={6} strokeDasharray="14 8" />
       {klass.room.desks.map((desk) => {
-        const cy = (desk.kind === "single-circle" || desk.kind === "multi-circle")
-          ? desk.height / 2
-          : desk.height / 2;
-        const transform = `translate(${desk.x} ${desk.y}) rotate(${desk.rotation} ${desk.width / 2} ${cy})`;
+        const transform = `translate(${desk.x} ${desk.y}) rotate(${desk.rotation} ${desk.width / 2} ${desk.height / 2})`;
         return (
           <g key={desk.id} transform={transform}>
             <DeskOutline desk={desk} />
@@ -109,7 +112,6 @@ function DeskOutline({ desk }: { desk: Desk }) {
       return (
         <rect x={0} y={0} width={desk.width} height={desk.height} fill="#f1f5f9" stroke="#475569" rx={4} />
       );
-    case "single-circle":
     case "multi-circle":
       return (
         <circle cx={desk.width / 2} cy={desk.height / 2} r={desk.width / 2} fill="#f1f5f9" stroke="#475569" />

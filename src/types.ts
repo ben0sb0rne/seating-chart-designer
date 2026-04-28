@@ -22,7 +22,6 @@ export interface Seat {
 export type DeskKind =
   | "single-rect"
   | "single-triangle"
-  | "single-circle"
   | "multi-rect"
   | "multi-square"
   | "multi-circle";
@@ -69,7 +68,7 @@ export interface ClassRoom {
   arrangements: Arrangement[];
 }
 
-export const SCHEMA_VERSION = 3 as const;
+export const SCHEMA_VERSION = 4 as const;
 
 export interface AppState {
   classes: ClassRoom[];

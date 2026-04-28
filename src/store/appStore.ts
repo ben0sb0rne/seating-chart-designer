@@ -65,6 +65,32 @@ function withClass(state: AppState, id: ClassId, mutate: (c: ClassRoom) => Class
   return { ...state, classes: state.classes.map((c) => (c.id === id ? mutate(c) : c)) };
 }
 
+/** v3 → v4: the "single-circle" desk kind was removed; convert any existing ones to single-rect. */
+function migrateV3toV4(persisted: unknown): AppState {
+  const obj = persisted as Record<string, unknown>;
+  const classes = (obj.classes ?? []) as Array<Record<string, unknown>>;
+  const migratedClasses = classes.map((klass) => {
+    const room = (klass.room ?? { width: 1000, height: 700, frontWall: "top", desks: [] }) as Record<string, unknown>;
+    const desks = ((room.desks as Array<Record<string, unknown>>) ?? []).map((d) =>
+      d.kind === "single-circle" ? { ...d, kind: "single-rect" } : d,
+    );
+    return {
+      ...(klass as object),
+      room: {
+        width: (room.width as number) ?? 1000,
+        height: (room.height as number) ?? 700,
+        frontWall: (room.frontWall as string) ?? "top",
+        desks,
+      },
+    } as ClassRoom;
+  });
+  return {
+    classes: migratedClasses,
+    activeClassId: (obj.activeClassId as string | null) ?? null,
+    schemaVersion: SCHEMA_VERSION,
+  };
+}
+
 /** v2 → v3: rooms gain a `frontWall` field. Default to "top" so behavior is unchanged. */
 function migrateV2toV3(persisted: unknown): AppState {
   const obj = persisted as Record<string, unknown>;
@@ -349,6 +375,7 @@ export const useAppStore = create<AppStore>()(
         let s: unknown = persisted;
         if (fromVersion < 2) s = migrateV1toV2(s);
         if (fromVersion < 3) s = migrateV2toV3(s);
+        if (fromVersion < 4) s = migrateV3toV4(s);
         return s as AppState;
       },
     },

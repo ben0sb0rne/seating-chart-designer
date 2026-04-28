@@ -2,8 +2,11 @@ import type { Desk, DeskKind, Seat } from "@/types";
 
 const uid = () => crypto.randomUUID();
 
-/** The base "single desk" size. All other shape sizes derive from this. */
+/** The base "single desk" module width. All other shape sizes derive from this. */
 export const MODULE = 80;
+/** Single desks are landscape rectangles: width MODULE, height MODULE * 3/4. */
+export const SINGLE_W = MODULE;
+export const SINGLE_H = (MODULE * 3) / 4;
 
 export interface MultiRectParams {
   rows: number;
@@ -52,12 +55,12 @@ export function makeDesk(kind: DeskKind, params: ShapeParams, x: number, y: numb
 export function layoutDesk(kind: DeskKind, params: ShapeParams): LaidOutShape {
   switch (kind) {
     case "single-rect":
-    case "single-circle":
-      return { width: MODULE, height: MODULE, seats: [seatAt(MODULE / 2, MODULE / 2)] };
+      return { width: SINGLE_W, height: SINGLE_H, seats: [seatAt(SINGLE_W / 2, SINGLE_H / 2)] };
     case "single-triangle": {
-      // Equilateral triangle inscribed in the bounding box, apex at top center,
-      // base flush with bottom edge. Seat at the centroid (2/3 down from apex).
-      return { width: MODULE, height: MODULE, seats: [seatAt(MODULE / 2, (MODULE * 2) / 3)] };
+      // Squashed isoceles triangle: same bounding box as the rectangle desk.
+      // Apex at top-center (W/2, 0); base spans the bottom edge from (0, H) to (W, H).
+      // Centroid is at (W/2, 2H/3).
+      return { width: SINGLE_W, height: SINGLE_H, seats: [seatAt(SINGLE_W / 2, (SINGLE_H * 2) / 3)] };
     }
     case "multi-rect":
       return layoutMultiRect(params as MultiRectParams);
@@ -158,10 +161,5 @@ export function cloneDeskWithFreshIds(desk: Desk, offsetX: number, offsetY: numb
 
 /** Whether resize should constrain proportionally. True for symmetric shapes. */
 export function shouldKeepRatio(kind: DeskKind): boolean {
-  return (
-    kind === "single-circle" ||
-    kind === "single-triangle" ||
-    kind === "multi-square" ||
-    kind === "multi-circle"
-  );
+  return kind === "multi-square" || kind === "multi-circle";
 }
