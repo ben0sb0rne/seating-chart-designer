@@ -1,5 +1,6 @@
 import type { AppState } from "@/types";
 import { SCHEMA_VERSION } from "@/types";
+import { runMigrations } from "@/lib/migrations";
 
 export function exportStateToFile(state: AppState) {
   const payload: AppState = {
@@ -34,15 +35,21 @@ function validateAppState(raw: unknown): ParsedImport {
   const warnings: string[] = [];
   if (!raw || typeof raw !== "object") throw new Error("File is not a JSON object");
   const obj = raw as Record<string, unknown>;
-  const version = obj.schemaVersion;
-  if (version !== SCHEMA_VERSION) {
-    warnings.push(`Schema version ${version} differs from current (${SCHEMA_VERSION}); attempting to load anyway.`);
-  }
   if (!Array.isArray(obj.classes)) throw new Error("Missing 'classes' array");
-  const state: AppState = {
-    classes: obj.classes as AppState["classes"],
-    activeClassId: typeof obj.activeClassId === "string" ? obj.activeClassId : null,
-    schemaVersion: SCHEMA_VERSION,
-  };
+
+  const incomingVersion = typeof obj.schemaVersion === "number" ? obj.schemaVersion : 1;
+  if (incomingVersion < SCHEMA_VERSION) {
+    warnings.push(
+      `Imported file was schema v${incomingVersion}; upgraded to v${SCHEMA_VERSION} on the fly.`,
+    );
+  } else if (incomingVersion > SCHEMA_VERSION) {
+    warnings.push(
+      `Imported file is schema v${incomingVersion} (newer than this app's v${SCHEMA_VERSION}). Some fields may be ignored.`,
+    );
+  }
+
+  // Run the same migration chain Zustand uses so imported files are normalised
+  // to the current shape (e.g. older files without `furniture` get filled in).
+  const state = runMigrations(obj, incomingVersion);
   return { state, warnings };
 }

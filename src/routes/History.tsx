@@ -11,6 +11,7 @@ export default function History() {
   const navigate = useNavigate();
   const klass = useAppStore((s) => (id ? s.classes.find((c) => c.id === id) : undefined));
   const deleteArrangement = useAppStore((s) => s.deleteArrangement);
+  const restoreArrangement = useAppStore((s) => s.restoreArrangement);
   const [viewing, setViewing] = useState<Arrangement | null>(null);
 
   if (!klass) return <div className="p-6 text-ink-muted">Class not found.</div>;
@@ -53,7 +54,13 @@ export default function History() {
                   <button
                     className="btn-secondary"
                     onClick={() => {
-                      sessionStorage.setItem(`restore:${klass.id}`, arr.id);
+                      if (
+                        Object.keys(klass.currentAssignments ?? {}).length > 0 &&
+                        !confirm("This will replace the current arrangement. Continue?")
+                      ) {
+                        return;
+                      }
+                      restoreArrangement(klass.id, arr.id);
                       navigate(`/classes/${klass.id}/room`);
                     }}
                   >

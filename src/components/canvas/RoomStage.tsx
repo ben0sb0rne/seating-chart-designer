@@ -1,11 +1,21 @@
-import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
-import { Stage, Layer, Rect, Line } from "react-konva";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Stage, Layer, Rect, Line, Transformer } from "react-konva";
 import type Konva from "konva";
 import type { ClassId, Room, SeatId, Student, StudentId, Wall } from "@/types";
 import DeskNode from "./DeskNode";
 import FurnitureNode from "./FurnitureNode";
 import SeatPicker from "./SeatPicker";
-import { snapDeskPosition, type Guide } from "@/lib/snap";
+import { snapPosition, type Guide, GRID } from "@/lib/snap";
+import { shouldKeepRatio } from "@/lib/shapes";
 import Icon, { type IconName } from "@/components/Icon";
 
 function frontWallLine(wall: Wall, w: number, h: number): number[] {
@@ -48,6 +58,10 @@ interface Props {
   assignments: Record<SeatId, StudentId>;
   onAssignSeat: (seatId: SeatId, studentId: StudentId | null) => void;
   classId: ClassId;
+  /** When true: drag/resize/rotate are disabled, and seat assignment still works. */
+  locked: boolean;
+  /** When true: render a faint dot grid behind the room. */
+  showGrid: boolean;
 }
 
 interface Marquee {
@@ -58,18 +72,60 @@ interface Marquee {
 }
 
 const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
-  { room, selectedItemIds, onSelectionChange, students, assignments, onAssignSeat, classId },
+  {
+    room,
+    selectedItemIds,
+    onSelectionChange,
+    students,
+    assignments,
+    onAssignSeat,
+    classId,
+    locked,
+    showGrid,
+  },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage>(null);
   const layerRef = useRef<Konva.Layer>(null);
+  const transformerRef = useRef<Konva.Transformer>(null);
+  const nodeRefs = useRef(new Map<string, Konva.Group>());
   useImperativeHandle(ref, () => stageRef.current!, []);
 
   const [size, setSize] = useState({ w: 800, h: 600 });
   const [guides, setGuides] = useState<Guide[]>([]);
   const [picker, setPicker] = useState<{ seatId: SeatId; x: number; y: number } | null>(null);
   const [marquee, setMarquee] = useState<Marquee | null>(null);
+
+  const registerNode = useCallback((id: string, node: Konva.Group | null) => {
+    if (node) nodeRefs.current.set(id, node);
+    else nodeRefs.current.delete(id);
+  }, []);
+
+  // Compute keepRatio for the unified Transformer based on the (single)
+  // selected item's kind, if any.
+  const transformerKeepRatio = useMemo(() => {
+    if (selectedItemIds.length !== 1) return false;
+    const id = selectedItemIds[0];
+    const desk = room.desks.find((d) => d.id === id);
+    if (desk) return shouldKeepRatio(desk.kind);
+    return false; // furniture is never ratio-locked
+  }, [selectedItemIds, room.desks]);
+
+  // Attach the Transformer to whichever nodes are currently selected.
+  useEffect(() => {
+    const tr = transformerRef.current;
+    if (!tr) return;
+    if (locked) {
+      tr.nodes([]);
+    } else {
+      const nodes = selectedItemIds
+        .map((id) => nodeRefs.current.get(id))
+        .filter((n): n is Konva.Group => !!n);
+      tr.nodes(nodes);
+    }
+    tr.getLayer()?.batchDraw();
+  }, [selectedItemIds, locked, room.desks, room.furniture]);
 
   useLayoutEffect(() => {
     const el = containerRef.current;
@@ -149,6 +205,31 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
     setMarquee(null);
   }
 
+  function snapItemDrag(itemId: string, x: number, y: number) {
+    const allItems = [
+      ...room.desks.map((d) => ({ id: d.id, x: d.x, y: d.y, width: d.width, height: d.height })),
+      ...(room.furniture ?? []).map((f) => ({ id: f.id, x: f.x, y: f.y, width: f.width, height: f.height })),
+    ];
+    const me = allItems.find((it) => it.id === itemId);
+    if (!me) return { x, y };
+    const result = snapPosition({ ...me, x, y }, x, y, allItems);
+    setGuides(result.guides);
+    return { x: result.x, y: result.y };
+  }
+
+  // Build dot-grid points (only when showGrid is true).
+  const gridDots = useMemo(() => {
+    if (!showGrid) return null;
+    const step = GRID * 4; // dot every 4 grid units = 40 px
+    const dots: { x: number; y: number }[] = [];
+    for (let x = step; x < room.width; x += step) {
+      for (let y = step; y < room.height; y += step) {
+        dots.push({ x, y });
+      }
+    }
+    return dots;
+  }, [showGrid, room.width, room.height]);
+
   return (
     <div ref={containerRef} className="relative min-h-0 flex-1 bg-slate-100" style={{ touchAction: "none" }}>
       <Stage
@@ -174,6 +255,19 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
             strokeWidth={2 / safeScale}
           />
 
+          {gridDots &&
+            gridDots.map((d, i) => (
+              <Rect
+                key={`g-${i}`}
+                x={d.x - 1}
+                y={d.y - 1}
+                width={2}
+                height={2}
+                fill="#cbd5e1"
+                listening={false}
+              />
+            ))}
+
           <Line
             points={frontWallLine(room.frontWall ?? "top", room.width, room.height)}
             stroke="#0f172a"
@@ -181,15 +275,16 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
             dash={[12 / safeScale, 8 / safeScale]}
           />
 
-          {/* Furniture renders before desks so desks visually overlay it. */}
           {(room.furniture ?? []).map((f) => (
             <FurnitureNode
               key={f.id}
               furniture={f}
               selected={selectedItemIds.includes(f.id)}
               onSelect={(additive) => handleSelectItem(f.id, additive)}
-              onDragMove={(_id, x, y) => ({ x, y })}
-              onDragEnd={() => undefined}
+              registerNode={registerNode}
+              draggable={!locked}
+              onDragMove={(id, x, y) => snapItemDrag(id, x, y)}
+              onDragEnd={() => setGuides([])}
               classId={classId}
             />
           ))}
@@ -202,21 +297,32 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
               onSelect={(additive) => handleSelectItem(desk.id, additive)}
               students={students}
               assignments={assignments}
+              registerNode={registerNode}
+              draggable={!locked}
               onSeatClick={(seatId, x, y) => {
                 const rect = containerRef.current?.getBoundingClientRect();
                 setPicker({ seatId, x: (rect?.left ?? 0) + x, y: (rect?.top ?? 0) + y });
               }}
-              onDragMove={(deskId, x, y) => {
-                const d = room.desks.find((dd) => dd.id === deskId);
-                if (!d) return { x, y };
-                const result = snapDeskPosition(d, x, y, room.desks);
-                setGuides(result.guides);
-                return { x: result.x, y: result.y };
-              }}
+              onDragMove={(id, x, y) => snapItemDrag(id, x, y)}
               onDragEnd={() => setGuides([])}
               classId={classId}
             />
           ))}
+
+          {/* Single shared Transformer for any/all selected items. */}
+          <Transformer
+            ref={transformerRef}
+            rotateEnabled={!locked}
+            resizeEnabled={!locked}
+            keepRatio={transformerKeepRatio}
+            rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+            rotationSnapTolerance={5}
+            borderStroke="#0284c7"
+            anchorStroke="#0284c7"
+            anchorFill="#ffffff"
+            anchorStrokeWidth={2}
+            anchorSize={10}
+          />
 
           {guides.map((g, i) =>
             g.axis === "x" ? (

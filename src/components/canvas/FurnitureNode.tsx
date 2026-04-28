@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Group, Rect, Circle, Line, Shape, Text, Transformer } from "react-konva";
+import { Group, Rect, Circle, Line, Shape, Text } from "react-konva";
 import type Konva from "konva";
 import type { ClassId, Furniture } from "@/types";
 import { FURNITURE_DEFAULTS, furnitureLabel } from "@/lib/furniture";
@@ -12,6 +12,8 @@ interface Props {
   onDragMove: (id: string, x: number, y: number) => { x: number; y: number };
   onDragEnd: () => void;
   classId: ClassId;
+  draggable: boolean;
+  registerNode: (id: string, node: Konva.Group | null) => void;
 }
 
 const STROKE_SELECTED = "#0284c7";
@@ -24,90 +26,71 @@ export default function FurnitureNode({
   onDragMove,
   onDragEnd,
   classId,
+  draggable,
+  registerNode,
 }: Props) {
   const groupRef = useRef<Konva.Group>(null);
-  const transformerRef = useRef<Konva.Transformer>(null);
-
   const updateFurniture = useAppStore((s) => s.updateFurniture);
 
   useEffect(() => {
-    if (selected && transformerRef.current && groupRef.current) {
-      transformerRef.current.nodes([groupRef.current]);
-      transformerRef.current.getLayer()?.batchDraw();
-    }
-  }, [selected]);
+    registerNode(furniture.id, groupRef.current);
+    return () => registerNode(furniture.id, null);
+  }, [furniture.id, registerNode]);
 
   const def = FURNITURE_DEFAULTS[furniture.kind];
   const stroke = selected ? STROKE_SELECTED : def.stroke;
   const strokeWidth = selected ? 3 : 2;
 
   return (
-    <>
-      <Group
-        ref={groupRef}
-        x={furniture.x}
-        y={furniture.y}
-        rotation={furniture.rotation}
-        draggable
-        onMouseDown={(e) => {
-          e.cancelBubble = true;
-          onSelect(e.evt.shiftKey);
-        }}
-        onTouchStart={(e) => {
-          e.cancelBubble = true;
-          onSelect(false);
-        }}
-        onDragMove={(e) => {
-          const node = e.target;
-          const snapped = onDragMove(furniture.id, node.x(), node.y());
-          node.x(snapped.x);
-          node.y(snapped.y);
-        }}
-        onDragEnd={(e) => {
-          updateFurniture(classId, furniture.id, { x: e.target.x(), y: e.target.y() });
-          onDragEnd();
-        }}
-        onTransformEnd={() => {
-          const node = groupRef.current;
-          if (!node) return;
-          const sx = node.scaleX();
-          const sy = node.scaleY();
-          const newWidth = Math.max(MIN_DIM, furniture.width * sx);
-          const newHeight = Math.max(MIN_DIM, furniture.height * sy);
-          node.scaleX(1);
-          node.scaleY(1);
-          updateFurniture(classId, furniture.id, {
-            x: node.x(),
-            y: node.y(),
-            rotation: node.rotation(),
-            width: newWidth,
-            height: newHeight,
-          });
-        }}
-      >
-        <FurnitureShape
-          furniture={furniture}
-          fill={def.fill}
-          stroke={stroke}
-          strokeWidth={strokeWidth}
-        />
-      </Group>
-
-      {selected && (
-        <Transformer
-          ref={transformerRef}
-          rotateEnabled
-          resizeEnabled
-          rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
-          rotationSnapTolerance={5}
-          borderStroke={STROKE_SELECTED}
-          anchorStroke={STROKE_SELECTED}
-          anchorFill="#ffffff"
-          anchorStrokeWidth={2}
-          anchorSize={10}
-        />
-      )}
-    </>
+    <Group
+      ref={groupRef}
+      x={furniture.x}
+      y={furniture.y}
+      rotation={furniture.rotation}
+      draggable={draggable}
+      onMouseDown={(e) => {
+        e.cancelBubble = true;
+        onSelect(e.evt.shiftKey);
+      }}
+      onTouchStart={(e) => {
+        e.cancelBubble = true;
+        onSelect(false);
+      }}
+      onDragMove={(e) => {
+        const node = e.target;
+        const snapped = onDragMove(furniture.id, node.x(), node.y());
+        node.x(snapped.x);
+        node.y(snapped.y);
+      }}
+      onDragEnd={(e) => {
+        updateFurniture(classId, furniture.id, { x: e.target.x(), y: e.target.y() });
+        onDragEnd();
+      }}
+      onTransformEnd={() => {
+        const node = groupRef.current;
+        if (!node) return;
+        const sx = node.scaleX();
+        const sy = node.scaleY();
+        const newWidth = Math.max(MIN_DIM, furniture.width * sx);
+        const newHeight = Math.max(MIN_DIM, furniture.height * sy);
+        node.scaleX(1);
+        node.scaleY(1);
+        updateFurniture(classId, furniture.id, {
+          x: node.x(),
+          y: node.y(),
+          rotation: node.rotation(),
+          width: newWidth,
+          height: newHeight,
+        });
+      }}
+    >
+      <FurnitureShape
+        furniture={furniture}
+        fill={def.fill}
+        stroke={stroke}
+        strokeWidth={strokeWidth}
+      />
+    </Group>
   );
 }
 
@@ -164,7 +147,6 @@ function FurnitureShape({
             strokeWidth={strokeWidth}
             cornerRadius={2}
           />
-          {/* Three shelves indicated by horizontal lines */}
           <Line points={[0, h * 0.33, w, h * 0.33]} stroke={stroke} strokeWidth={1} listening={false} />
           <Line points={[0, h * 0.66, w, h * 0.66]} stroke={stroke} strokeWidth={1} listening={false} />
         </>
@@ -181,7 +163,6 @@ function FurnitureShape({
             stroke={stroke}
             strokeWidth={strokeWidth}
           />
-          {/* Vertical mullion bisector */}
           <Line points={[w / 2, 0, w / 2, h]} stroke={stroke} strokeWidth={1.5} listening={false} />
         </>
       );
@@ -199,9 +180,6 @@ function FurnitureShape({
         />
       );
     case "door":
-      // Wall segment along the top edge + a quarter-circle sweep showing the
-      // door's swing path. The "wall" is just a thin line; the arc fills the
-      // bounding box from top-left.
       return (
         <>
           <Line points={[0, 0, w, 0]} stroke={stroke} strokeWidth={3} listening={false} />
@@ -248,5 +226,4 @@ function FurnitureShape({
   }
 }
 
-/** Used by the palette to label a furniture kind (re-exported helper). */
 export { furnitureLabel };

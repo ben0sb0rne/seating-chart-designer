@@ -87,9 +87,11 @@ export interface ClassRoom {
   students: Student[];
   room: Room;
   arrangements: Arrangement[];
+  /** Live working seat map. Persisted (and undoable) per class. */
+  currentAssignments: Record<SeatId, StudentId>;
 }
 
-export const SCHEMA_VERSION = 4 as const;
+export const SCHEMA_VERSION = 6 as const;
 
 export interface AppState {
   classes: ClassRoom[];

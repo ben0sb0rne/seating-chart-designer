@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAppStore } from "@/store/appStore";
+import Icon from "@/components/Icon";
 
 export default function ClassesIndex() {
   const navigate = useNavigate();
   const classes = useAppStore((s) => s.classes);
   const createClass = useAppStore((s) => s.createClass);
   const renameClass = useAppStore((s) => s.renameClass);
+  const duplicateClass = useAppStore((s) => s.duplicateClass);
   const deleteClass = useAppStore((s) => s.deleteClass);
   const [newName, setNewName] = useState("");
   const [newError, setNewError] = useState<string | null>(null);
@@ -135,6 +137,17 @@ export default function ClassesIndex() {
                       }}
                     >
                       Rename
+                    </button>
+                    <button
+                      className="btn-secondary"
+                      onClick={() => {
+                        const newId = duplicateClass(c.id);
+                        if (newId) navigate(`/classes/${newId}/roster`);
+                      }}
+                      title="Create a copy with the same students, room, and history"
+                    >
+                      <Icon name="copy" size={14} />
+                      Duplicate
                     </button>
                     <button
                       className="btn-danger"

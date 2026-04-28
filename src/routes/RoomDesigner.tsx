@@ -10,6 +10,7 @@ import { cloneDeskWithFreshIds, defaultParamsFor, layoutDesk, makeDesk, type Sha
 import { cloneFurnitureWithFreshId, makeFurniture } from "@/lib/furniture";
 import { assign } from "@/lib/assign";
 import { exportStageAsPng } from "@/lib/exportPng";
+import Icon from "@/components/Icon";
 import type { Desk, DeskKind, Furniture, FurnitureKind, SeatId, StudentId } from "@/types";
 
 const PASTE_OFFSET = 20;
@@ -19,46 +20,51 @@ export default function RoomDesigner() {
   const klass = useAppStore((s) => (id ? s.classes.find((c) => c.id === id) : undefined));
   const addDesk = useAppStore((s) => s.addDesk);
   const addDesks = useAppStore((s) => s.addDesks);
-  const updateDesk = useAppStore((s) => s.updateDesk);
   const removeDesks = useAppStore((s) => s.removeDesks);
+  const updateDesk = useAppStore((s) => s.updateDesk);
   const addFurniture = useAppStore((s) => s.addFurniture);
   const addFurnitures = useAppStore((s) => s.addFurnitures);
   const updateFurniture = useAppStore((s) => s.updateFurniture);
   const removeFurniture = useAppStore((s) => s.removeFurniture);
   const updateRoom = useAppStore((s) => s.updateRoom);
+  const assignSeatStore = useAppStore((s) => s.assignSeat);
+  const setAssignmentsStore = useAppStore((s) => s.setAssignments);
+  const restoreArrangement = useAppStore((s) => s.restoreArrangement);
   const saveArrangement = useAppStore((s) => s.saveArrangement);
 
   const stageRef = useRef<Konva.Stage>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
-  const [assignments, setAssignments] = useState<Record<SeatId, StudentId>>({});
   const [paramsDialog, setParamsDialog] = useState<{ open: boolean; kind: DeskKind | null }>({
     open: false,
     kind: null,
   });
   const [warning, setWarning] = useState<string | null>(null);
-  /** Snapshot of items copied via Ctrl+C (desks AND furniture). */
+  const [info, setInfo] = useState<string | null>(null);
   const [clipboard, setClipboard] = useState<{ desks: Desk[]; furniture: Furniture[] }>({
     desks: [],
     furniture: [],
   });
+  const [locked, setLocked] = useState(false);
+  const [showGrid, setShowGrid] = useState(false);
+  const [paletteCollapsed, setPaletteCollapsed] = useState(false);
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
+
+  // Live working assignments now live on the class itself.
+  const assignments = klass?.currentAssignments ?? {};
 
   useEffect(() => {
     setSelectedItemIds([]);
     setWarning(null);
-    if (!klass) {
-      setAssignments({});
-      return;
-    }
+    if (!klass) return;
+    // Backwards-compat: a "Restore" link from the legacy History flow may
+    // have written to sessionStorage; honour it but otherwise leave the
+    // class's currentAssignments alone.
     const restoreId = sessionStorage.getItem(`restore:${klass.id}`);
     if (restoreId) {
       sessionStorage.removeItem(`restore:${klass.id}`);
       const arr = klass.arrangements.find((a) => a.id === restoreId);
-      if (arr) {
-        setAssignments({ ...arr.assignments });
-        return;
-      }
+      if (arr) restoreArrangement(klass.id, arr.id);
     }
-    setAssignments({});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -70,6 +76,7 @@ export default function RoomDesigner() {
       if (!klass) return;
 
       if ((e.key === "Backspace" || e.key === "Delete") && selectedItemIds.length > 0) {
+        if (locked) return;
         e.preventDefault();
         const deskIds = klass.room.desks.filter((d) => selectedItemIds.includes(d.id)).map((d) => d.id);
         const furnIds = (klass.room.furniture ?? []).filter((f) => selectedItemIds.includes(f.id)).map((f) => f.id);
@@ -84,6 +91,7 @@ export default function RoomDesigner() {
         const furniture = (klass.room.furniture ?? []).filter((f) => selectedItemIds.includes(f.id));
         setClipboard({ desks, furniture });
       } else if (mod && e.key.toLowerCase() === "v" && (clipboard.desks.length || clipboard.furniture.length)) {
+        if (locked) return;
         e.preventDefault();
         const newDesks = clipboard.desks.map((d) => cloneDeskWithFreshIds(d, PASTE_OFFSET, PASTE_OFFSET));
         const newFurn = clipboard.furniture.map((f) => cloneFurnitureWithFreshId(f, PASTE_OFFSET, PASTE_OFFSET));
@@ -92,6 +100,7 @@ export default function RoomDesigner() {
         setSelectedItemIds([...newDesks.map((d) => d.id), ...newFurn.map((f) => f.id)]);
         setClipboard({ desks: newDesks, furniture: newFurn });
       } else if (mod && e.key.toLowerCase() === "d" && selectedItemIds.length > 0) {
+        if (locked) return;
         e.preventDefault();
         const desks = klass.room.desks
           .filter((d) => selectedItemIds.includes(d.id))
@@ -120,6 +129,7 @@ export default function RoomDesigner() {
     addDesks,
     addFurnitures,
     clipboard,
+    locked,
   ]);
 
   if (!klass) return <div className="p-6 text-ink-muted">Class not found.</div>;
@@ -134,14 +144,8 @@ export default function RoomDesigner() {
     addDesk(klass.id, makeDesk(kind, params, x, y));
   }
 
-  function handlePlaceSingle(kind: DeskKind) {
-    placeDeskAtCenter(kind, undefined);
-  }
-
-  function handleOpenMulti(kind: DeskKind) {
-    setParamsDialog({ open: true, kind });
-  }
-
+  function handlePlaceSingle(kind: DeskKind) { placeDeskAtCenter(kind, undefined); }
+  function handleOpenMulti(kind: DeskKind) { setParamsDialog({ open: true, kind }); }
   function handleConfirmMulti(kind: DeskKind, params: ShapeParams) {
     placeDeskAtCenter(kind, params ?? defaultParamsFor(kind));
   }
@@ -217,45 +221,66 @@ export default function RoomDesigner() {
   function handleRandomize() {
     if (!klass) return;
     setWarning(null);
+    setInfo(null);
+
+    // If there's already a non-empty arrangement, ask before overwriting.
+    const occupied = Object.keys(klass.currentAssignments ?? {}).length;
+    if (occupied > 0) {
+      const ok = confirm(
+        `This will overwrite the current arrangement (${occupied} student${occupied === 1 ? "" : "s"} placed). Continue?`,
+      );
+      if (!ok) return;
+    }
+
     const result = assign({ room: klass.room, students: klass.students, history: klass.arrangements });
     if (!result.ok) {
       setWarning(result.reason);
       return;
     }
-    setAssignments(result.assignments);
+    setAssignmentsStore(klass.id, result.assignments);
+
+    // Soft empty-seats notice.
+    const totalSeats = klass.room.desks.reduce((n, d) => n + d.seats.length, 0);
+    const emptySeats = totalSeats - Object.keys(result.assignments).length;
+    if (emptySeats > 0) {
+      setInfo(`${emptySeats} seat${emptySeats === 1 ? "" : "s"} left empty (more seats than students).`);
+    }
   }
 
   function handleSaveArrangement() {
     if (!klass) return;
-    const occupied = Object.keys(assignments).length;
+    const occupied = Object.keys(klass.currentAssignments ?? {}).length;
     if (occupied === 0) {
       setWarning("Nothing to save — assign students first (try Randomize).");
       return;
     }
     const label = prompt("Label for this arrangement (optional):") ?? undefined;
-    saveArrangement(klass.id, assignments, label || undefined);
+    saveArrangement(klass.id, label || undefined);
     setWarning(null);
   }
 
   function handleExportImage() {
     if (!stageRef.current || !klass) return;
     const date = new Date().toISOString().slice(0, 10);
-    exportStageAsPng(stageRef.current, `${klass.name.replace(/\s+/g, "_")}_${date}`);
+    exportStageAsPng(stageRef.current, `${klass.name.replace(/\s+/g, "_")}_${date}`, "transparent");
+  }
+
+  function handleExportPrint() {
+    if (!stageRef.current || !klass) return;
+    const date = new Date().toISOString().slice(0, 10);
+    exportStageAsPng(stageRef.current, `${klass.name.replace(/\s+/g, "_")}_${date}`, "print");
   }
 
   function handleAssignSeat(seatId: SeatId, studentId: StudentId | null) {
-    setAssignments((prev) => {
-      const next = { ...prev };
-      for (const [s, st] of Object.entries(next)) if (st === studentId) delete next[s];
-      if (studentId === null) delete next[seatId];
-      else next[seatId] = studentId;
-      return next;
-    });
+    if (!klass) return;
+    assignSeatStore(klass.id, seatId, studentId);
   }
 
   return (
     <div className="flex h-full min-h-0">
       <DeskPalette
+        collapsed={paletteCollapsed}
+        onToggleCollapsed={() => setPaletteCollapsed((c) => !c)}
         onPlaceSingle={handlePlaceSingle}
         onOpenMulti={handleOpenMulti}
         onPlaceFurniture={handlePlaceFurniture}
@@ -266,6 +291,10 @@ export default function RoomDesigner() {
         onAlignHorizontal={handleAlignHorizontal}
         onDistributeVertical={handleDistributeVertical}
         onDistributeHorizontal={handleDistributeHorizontal}
+        locked={locked}
+        onToggleLocked={() => setLocked((l) => !l)}
+        showGrid={showGrid}
+        onToggleGrid={() => setShowGrid((g) => !g)}
       />
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         <RoomStage
@@ -277,23 +306,36 @@ export default function RoomDesigner() {
           assignments={assignments}
           onAssignSeat={handleAssignSeat}
           classId={klass.id}
+          locked={locked}
+          showGrid={showGrid}
         />
         {warning && (
           <div className="absolute inset-x-0 top-0 z-10 mx-auto mt-2 max-w-md rounded border border-amber-200 bg-amber-50/95 px-3 py-2 text-sm text-amber-900 shadow-md backdrop-blur">
             <strong>Heads up:</strong> {warning}
-            <button className="ml-3 text-xs underline" onClick={() => setWarning(null)}>
-              Dismiss
-            </button>
+            <button className="ml-3 text-xs underline" onClick={() => setWarning(null)}>Dismiss</button>
           </div>
         )}
+        {info && !warning && (
+          <div className="absolute inset-x-0 top-0 z-10 mx-auto mt-2 max-w-md rounded border border-sky-200 bg-sky-50/95 px-3 py-2 text-sm text-sky-900 shadow-md backdrop-blur">
+            {info}
+            <button className="ml-3 text-xs underline" onClick={() => setInfo(null)}>Dismiss</button>
+          </div>
+        )}
+        <div className="pointer-events-none absolute bottom-2 left-1/2 z-10 -translate-x-1/2 rounded bg-white/85 px-2 py-1 text-[10px] text-ink-muted shadow-sm">
+          <Icon name="help-circle" size={10} className="mr-1 inline -mt-0.5" />
+          Tip: right-click a desk to mark its seats as front-row
+        </div>
       </div>
       <AssignmentPanel
+        collapsed={panelCollapsed}
+        onToggleCollapsed={() => setPanelCollapsed((c) => !c)}
         klass={klass}
         assignments={assignments}
         onAssignSeat={handleAssignSeat}
         onRandomize={handleRandomize}
         onSave={handleSaveArrangement}
         onExportImage={handleExportImage}
+        onExportPrint={handleExportPrint}
       />
       <MultiShapeParamsDialog
         open={paramsDialog.open}

@@ -4,28 +4,61 @@ import { roomSeats } from "@/lib/adjacency";
 import Icon from "@/components/Icon";
 
 interface Props {
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
   klass: ClassRoom;
   assignments: Record<SeatId, StudentId>;
   onAssignSeat: (seatId: SeatId, studentId: StudentId | null) => void;
   onRandomize: () => void;
   onSave: () => void;
   onExportImage: () => void;
+  onExportPrint: () => void;
 }
 
 export default function AssignmentPanel({
+  collapsed,
+  onToggleCollapsed,
   klass,
   assignments,
   onAssignSeat,
   onRandomize,
   onSave,
   onExportImage,
+  onExportPrint,
 }: Props) {
   const seats = useMemo(() => roomSeats(klass.room), [klass.room]);
   const seated = new Set(Object.values(assignments));
   const unseated = klass.students.filter((s) => !seated.has(s.id));
 
+  if (collapsed) {
+    return (
+      <aside className="flex w-10 shrink-0 flex-col items-center border-l border-slate-200 bg-white py-2">
+        <button
+          className="rounded p-1.5 text-ink-muted hover:bg-slate-100"
+          onClick={onToggleCollapsed}
+          title="Expand assignments panel"
+        >
+          <Icon name="chevrons-left" size={16} />
+        </button>
+      </aside>
+    );
+  }
+
   return (
     <aside className="flex w-72 shrink-0 flex-col border-l border-slate-200 bg-white">
+      <div className="flex items-center justify-between border-b border-slate-200 px-3 py-1.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+          Assignments
+        </span>
+        <button
+          className="rounded p-1 text-ink-muted hover:bg-slate-100"
+          onClick={onToggleCollapsed}
+          title="Collapse panel"
+        >
+          <Icon name="chevrons-right" size={14} />
+        </button>
+      </div>
+
       <div className="space-y-2 border-b border-slate-200 p-3">
         <button className="btn-primary w-full" onClick={onRandomize}>
           <Icon name="shuffle" size={14} />
@@ -35,15 +68,21 @@ export default function AssignmentPanel({
           <Icon name="save" size={14} />
           Save this arrangement
         </button>
-        <button className="btn-secondary w-full" onClick={onExportImage}>
-          <Icon name="image" size={14} />
-          Export PNG
-        </button>
+        <div className="grid grid-cols-2 gap-2">
+          <button className="btn-secondary" onClick={onExportImage} title="Transparent PNG, good for screens">
+            <Icon name="image" size={14} />
+            <span className="text-xs">PNG</span>
+          </button>
+          <button className="btn-secondary" onClick={onExportPrint} title="White background, good for paper">
+            <Icon name="printer" size={14} />
+            <span className="text-xs">Print</span>
+          </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-auto p-3">
         <div className="mb-2 flex items-center justify-between">
-          <span className="label">Assignments</span>
+          <span className="label">Seats</span>
           <span className="text-xs text-ink-muted">{Object.keys(assignments).length} / {seats.length}</span>
         </div>
         <ul className="space-y-1 text-sm">

@@ -5,6 +5,8 @@ import Icon from "@/components/Icon";
 import { FURNITURE_DEFAULTS, FURNITURE_KINDS, furnitureLabel } from "@/lib/furniture";
 
 interface Props {
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
   onPlaceSingle: (kind: DeskKind) => void;
   onOpenMulti: (kind: DeskKind) => void;
   onPlaceFurniture: (kind: FurnitureKind) => void;
@@ -15,6 +17,10 @@ interface Props {
   onAlignHorizontal: () => void;
   onDistributeVertical: () => void;
   onDistributeHorizontal: () => void;
+  locked: boolean;
+  onToggleLocked: () => void;
+  showGrid: boolean;
+  onToggleGrid: () => void;
 }
 
 interface PaletteItem {
@@ -37,6 +43,8 @@ const DEFAULT_ROOM_W = 1000;
 const DEFAULT_ROOM_H = 700;
 
 export default function DeskPalette({
+  collapsed,
+  onToggleCollapsed,
   onPlaceSingle,
   onOpenMulti,
   onPlaceFurniture,
@@ -47,14 +55,43 @@ export default function DeskPalette({
   onAlignHorizontal,
   onDistributeVertical,
   onDistributeHorizontal,
+  locked,
+  onToggleLocked,
+  showGrid,
+  onToggleGrid,
 }: Props) {
   const [roomOptsOpen, setRoomOptsOpen] = useState(false);
-  const canAlign = selectionSize >= 2;
-  const canDistribute = selectionSize >= 3;
+  const canAlign = selectionSize >= 2 && !locked;
+  const canDistribute = selectionSize >= 3 && !locked;
   const isDefaultRoom = room.width === DEFAULT_ROOM_W && room.height === DEFAULT_ROOM_H;
+
+  if (collapsed) {
+    return (
+      <aside className="flex w-10 shrink-0 flex-col items-center border-r border-slate-200 bg-white py-2">
+        <button
+          className="rounded p-1.5 text-ink-muted hover:bg-slate-100"
+          onClick={onToggleCollapsed}
+          title="Expand palette"
+        >
+          <Icon name="chevrons-right" size={16} />
+        </button>
+      </aside>
+    );
+  }
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
+      <div className="flex items-center justify-between border-b border-slate-200 px-3 py-1.5">
+        <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">Palette</span>
+        <button
+          className="rounded p-1 text-ink-muted hover:bg-slate-100"
+          onClick={onToggleCollapsed}
+          title="Collapse palette"
+        >
+          <Icon name="chevrons-left" size={14} />
+        </button>
+      </div>
+
       <div className="flex-1 overflow-auto p-3">
         <div className="label mb-2">Single-student</div>
         <ul className="mb-5 space-y-1">
@@ -108,50 +145,47 @@ export default function DeskPalette({
         <div className="mb-2 flex items-center justify-between">
           <span className="label">Arrange selected</span>
           <span className="text-[10px] text-ink-muted">
-            {selectionSize} desk{selectionSize === 1 ? "" : "s"}
+            {selectionSize} item{selectionSize === 1 ? "" : "s"}
           </span>
         </div>
         <div className="mb-2 grid grid-cols-2 gap-1">
-          <button
-            className="btn-secondary justify-center"
-            onClick={onAlignVertical}
-            disabled={!canAlign}
-            title="Align selected desks to the same X (line them up vertically)"
-          >
+          <button className="btn-secondary justify-center" onClick={onAlignVertical} disabled={!canAlign} title="Align selected items to the same X">
             <Icon name="align-vertical" size={14} />
             <span className="text-xs">Align V</span>
           </button>
-          <button
-            className="btn-secondary justify-center"
-            onClick={onAlignHorizontal}
-            disabled={!canAlign}
-            title="Align selected desks to the same Y (line them up horizontally)"
-          >
+          <button className="btn-secondary justify-center" onClick={onAlignHorizontal} disabled={!canAlign} title="Align selected items to the same Y">
             <Icon name="align-horizontal" size={14} />
             <span className="text-xs">Align H</span>
           </button>
-          <button
-            className="btn-secondary justify-center"
-            onClick={onDistributeVertical}
-            disabled={!canDistribute}
-            title="Spread selected desks evenly between the topmost and bottommost"
-          >
+          <button className="btn-secondary justify-center" onClick={onDistributeVertical} disabled={!canDistribute} title="Spread items evenly between top and bottom">
             <Icon name="distribute-vertical" size={14} />
             <span className="text-xs">Dist V</span>
           </button>
-          <button
-            className="btn-secondary justify-center"
-            onClick={onDistributeHorizontal}
-            disabled={!canDistribute}
-            title="Spread selected desks evenly between the leftmost and rightmost"
-          >
+          <button className="btn-secondary justify-center" onClick={onDistributeHorizontal} disabled={!canDistribute} title="Spread items evenly between left and right">
             <Icon name="distribute-horizontal" size={14} />
             <span className="text-xs">Dist H</span>
           </button>
         </div>
-        <p className="mb-5 text-[10px] text-ink-muted">
-          Distribute needs 3+ desks selected.
-        </p>
+        <p className="mb-5 text-[10px] text-ink-muted">Distribute needs 3+ items selected.</p>
+
+        <div className="mb-5 grid grid-cols-2 gap-1">
+          <button
+            className={cn("btn-secondary justify-center", locked && "border-ink bg-ink text-white hover:bg-ink")}
+            onClick={onToggleLocked}
+            title={locked ? "Unlock layout" : "Lock layout (prevents accidental drag/resize)"}
+          >
+            <Icon name={locked ? "lock" : "unlock"} size={14} />
+            <span className="text-xs">{locked ? "Locked" : "Unlock"}</span>
+          </button>
+          <button
+            className={cn("btn-secondary justify-center", showGrid && "border-ink bg-ink text-white hover:bg-ink")}
+            onClick={onToggleGrid}
+            title={showGrid ? "Hide grid overlay" : "Show grid overlay"}
+          >
+            <Icon name="grid" size={14} />
+            <span className="text-xs">Grid</span>
+          </button>
+        </div>
 
         <button
           className="flex w-full items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-ink-muted hover:bg-slate-100"
@@ -176,31 +210,14 @@ export default function DeskPalette({
                 </button>
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <NumberField
-                  ariaLabel="Width"
-                  value={room.width}
-                  min={400}
-                  max={3000}
-                  step={50}
-                  onChange={(v) => onUpdateRoom({ width: v })}
-                />
-                <NumberField
-                  ariaLabel="Height"
-                  value={room.height}
-                  min={400}
-                  max={3000}
-                  step={50}
-                  onChange={(v) => onUpdateRoom({ height: v })}
-                />
+                <NumberField ariaLabel="Width" value={room.width} min={400} max={3000} step={50} onChange={(v) => onUpdateRoom({ width: v })} />
+                <NumberField ariaLabel="Height" value={room.height} min={400} max={3000} step={50} onChange={(v) => onUpdateRoom({ height: v })} />
               </div>
               <p className="mt-1 text-[10px] text-ink-muted">Width × height of the room area.</p>
             </div>
             <div>
               <label className="label">Front of room</label>
-              <FrontWallPicker
-                value={room.frontWall ?? "top"}
-                onChange={(wall) => onUpdateRoom({ frontWall: wall })}
-              />
+              <FrontWallPicker value={room.frontWall ?? "top"} onChange={(wall) => onUpdateRoom({ frontWall: wall })} />
             </div>
           </div>
         )}
@@ -209,7 +226,6 @@ export default function DeskPalette({
   );
 }
 
-/** Three-row layout matching the spatial arrangement: top centered, then left+right, then bottom. */
 function FrontWallPicker({ value, onChange }: { value: Wall; onChange: (w: Wall) => void }) {
   return (
     <div className="mt-1 grid grid-cols-3 gap-1">
@@ -226,23 +242,13 @@ function FrontWallPicker({ value, onChange }: { value: Wall; onChange: (w: Wall)
   );
 }
 
-function WallButton({
-  wall,
-  current,
-  onClick,
-}: {
-  wall: Wall;
-  current: Wall;
-  onClick: (w: Wall) => void;
-}) {
+function WallButton({ wall, current, onClick }: { wall: Wall; current: Wall; onClick: (w: Wall) => void }) {
   const active = wall === current;
   return (
     <button
       className={cn(
         "rounded-md border px-2 py-1 text-xs capitalize",
-        active
-          ? "border-ink bg-ink text-white"
-          : "border-slate-300 bg-white text-ink hover:bg-slate-50",
+        active ? "border-ink bg-ink text-white" : "border-slate-300 bg-white text-ink hover:bg-slate-50",
       )}
       onClick={() => onClick(wall)}
     >
@@ -251,20 +257,8 @@ function WallButton({
   );
 }
 
-function NumberField({
-  ariaLabel,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-}: {
-  ariaLabel: string;
-  value: number;
-  min: number;
-  max: number;
-  step?: number;
-  onChange: (v: number) => void;
+function NumberField({ ariaLabel, value, min, max, step, onChange }: {
+  ariaLabel: string; value: number; min: number; max: number; step?: number; onChange: (v: number) => void;
 }) {
   return (
     <input
