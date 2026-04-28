@@ -6,15 +6,18 @@ import RoomStage from "@/components/canvas/RoomStage";
 import DeskPalette from "@/components/canvas/DeskPalette";
 import AssignmentPanel from "@/components/canvas/AssignmentPanel";
 import MultiShapeParamsDialog from "@/components/designer/MultiShapeParamsDialog";
-import { defaultParamsFor, layoutDesk, makeDesk, type ShapeParams } from "@/lib/shapes";
+import { cloneDeskWithFreshIds, defaultParamsFor, layoutDesk, makeDesk, type ShapeParams } from "@/lib/shapes";
 import { assign } from "@/lib/assign";
 import { exportStageAsJpg } from "@/lib/exportJpg";
-import type { DeskId, DeskKind, SeatId, StudentId } from "@/types";
+import type { Desk, DeskId, DeskKind, SeatId, StudentId } from "@/types";
+
+const PASTE_OFFSET = 20;
 
 export default function RoomDesigner() {
   const { id } = useParams();
   const klass = useAppStore((s) => (id ? s.classes.find((c) => c.id === id) : undefined));
   const addDesk = useAppStore((s) => s.addDesk);
+  const addDesks = useAppStore((s) => s.addDesks);
   const removeDesks = useAppStore((s) => s.removeDesks);
   const saveArrangement = useAppStore((s) => s.saveArrangement);
 
@@ -26,6 +29,8 @@ export default function RoomDesigner() {
     kind: null,
   });
   const [warning, setWarning] = useState<string | null>(null);
+  /** Snapshot of desks copied via Ctrl+C; offset is applied at paste time. */
+  const [clipboard, setClipboard] = useState<Desk[]>([]);
 
   useEffect(() => {
     setSelectedDeskIds([]);
@@ -51,17 +56,36 @@ export default function RoomDesigner() {
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+      const mod = e.ctrlKey || e.metaKey;
+
       if ((e.key === "Backspace" || e.key === "Delete") && selectedDeskIds.length > 0 && klass) {
         e.preventDefault();
         removeDesks(klass.id, selectedDeskIds);
         setSelectedDeskIds([]);
       } else if (e.key === "Escape") {
         setSelectedDeskIds([]);
+      } else if (mod && e.key.toLowerCase() === "c" && klass && selectedDeskIds.length > 0) {
+        e.preventDefault();
+        const selected = klass.room.desks.filter((d) => selectedDeskIds.includes(d.id));
+        setClipboard(selected);
+      } else if (mod && e.key.toLowerCase() === "v" && klass && clipboard.length > 0) {
+        e.preventDefault();
+        const cloned = clipboard.map((d) => cloneDeskWithFreshIds(d, PASTE_OFFSET, PASTE_OFFSET));
+        addDesks(klass.id, cloned);
+        setSelectedDeskIds(cloned.map((d) => d.id));
+        // Update the clipboard with the offset versions so subsequent pastes step further down/right.
+        setClipboard(cloned);
+      } else if (mod && e.key.toLowerCase() === "d" && klass && selectedDeskIds.length > 0) {
+        e.preventDefault();
+        const selected = klass.room.desks.filter((d) => selectedDeskIds.includes(d.id));
+        const cloned = selected.map((d) => cloneDeskWithFreshIds(d, PASTE_OFFSET, PASTE_OFFSET));
+        addDesks(klass.id, cloned);
+        setSelectedDeskIds(cloned.map((d) => d.id));
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectedDeskIds, klass, removeDesks]);
+  }, [selectedDeskIds, klass, removeDesks, addDesks, clipboard]);
 
   if (!klass) return <div className="p-6 text-ink-muted">Class not found.</div>;
 

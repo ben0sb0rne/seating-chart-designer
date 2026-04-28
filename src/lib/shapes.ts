@@ -150,3 +150,18 @@ export function defaultParamsFor(kind: DeskKind): ShapeParams {
       return undefined;
   }
 }
+
+/**
+ * Clone a desk with a fresh ID, fresh seat IDs, and an applied position offset.
+ * Front-row tags are preserved. The new seats are guaranteed not to collide
+ * with any existing seat IDs in any existing arrangement.
+ */
+export function cloneDeskWithFreshIds(desk: Desk, offsetX: number, offsetY: number): Desk {
+  return {
+    ...desk,
+    id: uid(),
+    x: desk.x + offsetX,
+    y: desk.y + offsetY,
+    seats: desk.seats.map((seat) => ({ ...seat, id: uid() })),
+  };
+}

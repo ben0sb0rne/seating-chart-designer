@@ -35,6 +35,7 @@ interface AppActions {
 
   // Room / desks
   addDesk: (classId: ClassId, desk: Desk) => void;
+  addDesks: (classId: ClassId, desks: Desk[]) => void;
   updateDesk: (classId: ClassId, deskId: DeskId, patch: Partial<Desk>) => void;
   removeDesks: (classId: ClassId, deskIds: DeskId[]) => void;
   setSeatFrontRow: (classId: ClassId, deskId: DeskId, seatId: SeatId, value: boolean) => void;
@@ -221,6 +222,9 @@ export const useAppStore = create<AppStore>()(
 
       addDesk: (classId, desk) =>
         set((s) => withClass(s, classId, (c) => ({ ...c, room: { ...c.room, desks: [...c.room.desks, desk] } }))),
+
+      addDesks: (classId, desks) =>
+        set((s) => withClass(s, classId, (c) => ({ ...c, room: { ...c.room, desks: [...c.room.desks, ...desks] } }))),
 
       updateDesk: (classId, deskId, patch) =>
         set((s) =>

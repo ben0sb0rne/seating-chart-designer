@@ -60,8 +60,15 @@ export default function DeskPalette({ onPlaceSingle, onOpenMulti }: Props) {
           ))}
         </ul>
       </div>
-      <div className="border-t border-slate-200 p-3 text-xs text-ink-muted">
-        Single-student desks drop directly. Multi-student tables ask for parameters first. Drag any desk to reposition; rotate via the handle. Press Delete to remove.
+      <div className="space-y-1 border-t border-slate-200 p-3 text-xs text-ink-muted">
+        <div>Single-student desks drop directly. Multi-student tables ask for parameters first.</div>
+        <div>Drag to reposition; rotate via the handle. Right-click a desk to mark its seats as front-row.</div>
+        <div>
+          <kbd className="rounded border border-slate-300 bg-slate-50 px-1">Del</kbd> remove ·{" "}
+          <kbd className="rounded border border-slate-300 bg-slate-50 px-1">Ctrl C</kbd>/
+          <kbd className="rounded border border-slate-300 bg-slate-50 px-1">V</kbd> copy/paste ·{" "}
+          <kbd className="rounded border border-slate-300 bg-slate-50 px-1">Ctrl D</kbd> duplicate
+        </div>
       </div>
     </aside>
   );
