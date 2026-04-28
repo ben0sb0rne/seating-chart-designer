@@ -19,3 +19,9 @@ vite.config.js
 
 # Claude Code per-user settings
 .claude/
+
+# Personal notes / scratch files
+To-Dos.txt
+TODO.txt
+NOTES.md
+notes.md
