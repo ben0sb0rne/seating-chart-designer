@@ -6,6 +6,11 @@ dist-ssr
 .idea
 *.log
 
+# TypeScript incremental build artifacts (from `tsc -b`)
+*.tsbuildinfo
+vite.config.d.ts
+vite.config.js
+
 # Editor — keep shared workspace config, ignore per-user state
 .vscode/*
 !.vscode/extensions.json

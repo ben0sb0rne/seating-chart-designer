@@ -1,20 +1,19 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import type Konva from "konva";
 import { useAppStore } from "@/store/appStore";
 import RoomStage from "@/components/canvas/RoomStage";
 import DeskPalette from "@/components/canvas/DeskPalette";
 import AssignmentPanel from "@/components/canvas/AssignmentPanel";
-import CustomShapeDialog from "@/components/designer/CustomShapeDialog";
-import { BUILT_IN_SHAPES, makeDesk } from "@/lib/shapes";
+import MultiShapeParamsDialog from "@/components/designer/MultiShapeParamsDialog";
+import { defaultParamsFor, layoutDesk, makeDesk, type ShapeParams } from "@/lib/shapes";
 import { assign } from "@/lib/assign";
 import { exportStageAsJpg } from "@/lib/exportJpg";
-import type { DeskId, SeatId, StudentId } from "@/types";
+import type { DeskId, DeskKind, SeatId, StudentId } from "@/types";
 
 export default function RoomDesigner() {
   const { id } = useParams();
   const klass = useAppStore((s) => (id ? s.classes.find((c) => c.id === id) : undefined));
-  const customShapes = useAppStore((s) => s.customShapes);
   const addDesk = useAppStore((s) => s.addDesk);
   const removeDesks = useAppStore((s) => s.removeDesks);
   const saveArrangement = useAppStore((s) => s.saveArrangement);
@@ -22,10 +21,12 @@ export default function RoomDesigner() {
   const stageRef = useRef<Konva.Stage>(null);
   const [selectedDeskIds, setSelectedDeskIds] = useState<DeskId[]>([]);
   const [assignments, setAssignments] = useState<Record<SeatId, StudentId>>({});
-  const [shapeDialogOpen, setShapeDialogOpen] = useState(false);
+  const [paramsDialog, setParamsDialog] = useState<{ open: boolean; kind: DeskKind | null }>({
+    open: false,
+    kind: null,
+  });
   const [warning, setWarning] = useState<string | null>(null);
 
-  // When the class changes, reset transient state — and check for a pending Restore from history.
   useEffect(() => {
     setSelectedDeskIds([]);
     setWarning(null);
@@ -46,7 +47,6 @@ export default function RoomDesigner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
-  // Keyboard: Backspace/Delete removes selection.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const target = e.target as HTMLElement | null;
@@ -63,17 +63,29 @@ export default function RoomDesigner() {
     return () => window.removeEventListener("keydown", onKey);
   }, [selectedDeskIds, klass, removeDesks]);
 
-  const allShapes = useMemo(() => [...BUILT_IN_SHAPES, ...customShapes], [customShapes]);
-
   if (!klass) return <div className="p-6 text-ink-muted">Class not found.</div>;
 
-  function placeDesk(shapeId: string) {
+  function placeDeskAtCenter(kind: DeskKind, params: ShapeParams) {
     if (!klass) return;
-    const shape = allShapes.find((s) => s.id === shapeId);
-    if (!shape) return;
-    const cx = klass.room.width / 2 - shape.width / 2;
-    const cy = klass.room.height / 2 - shape.height / 2;
-    addDesk(klass.id, makeDesk(shape, Math.round(cx / 10) * 10, Math.round(cy / 10) * 10));
+    const layout = layoutDesk(kind, params);
+    const cx = klass.room.width / 2 - layout.width / 2;
+    const cy = klass.room.height / 2 - layout.height / 2;
+    const x = Math.round(cx / 10) * 10;
+    const y = Math.round(cy / 10) * 10;
+    addDesk(klass.id, makeDesk(kind, params, x, y));
+  }
+
+  function handlePlaceSingle(kind: DeskKind) {
+    placeDeskAtCenter(kind, undefined);
+  }
+
+  function handleOpenMulti(kind: DeskKind) {
+    // The dialog itself uses its own defaults; the kind tells it which inputs to show.
+    setParamsDialog({ open: true, kind });
+  }
+
+  function handleConfirmMulti(kind: DeskKind, params: ShapeParams) {
+    placeDeskAtCenter(kind, params ?? defaultParamsFor(kind));
   }
 
   function handleRandomize() {
@@ -108,7 +120,6 @@ export default function RoomDesigner() {
   function handleAssignSeat(seatId: SeatId, studentId: StudentId | null) {
     setAssignments((prev) => {
       const next = { ...prev };
-      // Remove any prior assignment of this student
       for (const [s, st] of Object.entries(next)) if (st === studentId) delete next[s];
       if (studentId === null) delete next[seatId];
       else next[seatId] = studentId;
@@ -118,22 +129,19 @@ export default function RoomDesigner() {
 
   return (
     <div className="flex h-full min-h-0">
-      <DeskPalette
-        shapes={allShapes}
-        onPlace={placeDesk}
-        onCreateCustom={() => setShapeDialogOpen(true)}
-      />
+      <DeskPalette onPlaceSingle={handlePlaceSingle} onOpenMulti={handleOpenMulti} />
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         {warning && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
             <strong>Heads up:</strong> {warning}
-            <button className="ml-3 text-xs underline" onClick={() => setWarning(null)}>Dismiss</button>
+            <button className="ml-3 text-xs underline" onClick={() => setWarning(null)}>
+              Dismiss
+            </button>
           </div>
         )}
         <RoomStage
           ref={stageRef}
           room={klass.room}
-          customShapes={customShapes}
           selectedDeskIds={selectedDeskIds}
           onSelectionChange={setSelectedDeskIds}
           students={klass.students}
@@ -150,7 +158,12 @@ export default function RoomDesigner() {
         onSave={handleSaveArrangement}
         onExportJpg={handleExportJpg}
       />
-      <CustomShapeDialog open={shapeDialogOpen} onOpenChange={setShapeDialogOpen} />
+      <MultiShapeParamsDialog
+        open={paramsDialog.open}
+        onOpenChange={(open) => setParamsDialog((p) => ({ ...p, open }))}
+        kind={paramsDialog.kind}
+        onConfirm={handleConfirmMulti}
+      />
     </div>
   );
 }

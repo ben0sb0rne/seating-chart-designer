@@ -5,8 +5,8 @@ import { exportStateToFile, readStateFromFile } from "@/lib/io";
 export default function ImportExportMenu() {
   const fileRef = useRef<HTMLInputElement>(null);
   const exportNow = () => {
-    const { classes, customShapes, activeClassId, schemaVersion } = useAppStore.getState();
-    exportStateToFile({ classes, customShapes, activeClassId, schemaVersion });
+    const { classes, activeClassId, schemaVersion } = useAppStore.getState();
+    exportStateToFile({ classes, activeClassId, schemaVersion });
   };
 
   const handleImport: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
@@ -16,7 +16,7 @@ export default function ImportExportMenu() {
       const { state, warnings } = await readStateFromFile(file);
       const replace = confirm(
         `Import "${file.name}"?\n\n` +
-          `${state.classes.length} classes, ${state.customShapes.length} custom shapes.\n\n` +
+          `${state.classes.length} class${state.classes.length === 1 ? "" : "es"}.\n\n` +
           `OK = Replace all current data.\nCancel = Merge (add to current data).` +
           (warnings.length ? `\n\nWarnings:\n- ${warnings.join("\n- ")}` : ""),
       );
@@ -26,7 +26,6 @@ export default function ImportExportMenu() {
       } else {
         store.replaceState({
           classes: [...store.classes, ...state.classes],
-          customShapes: [...store.customShapes, ...state.customShapes],
           activeClassId: store.activeClassId ?? state.activeClassId,
           schemaVersion: store.schemaVersion,
         });

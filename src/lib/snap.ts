@@ -1,6 +1,4 @@
 import type { Desk } from "@/types";
-import { findShape } from "@/lib/shapes";
-import type { DeskShape } from "@/types";
 
 export const GRID = 10;
 export const SNAP_THRESHOLD = 6;
@@ -29,18 +27,14 @@ export interface BoundingBox {
   centerY: number;
 }
 
-export function deskBounds(desk: Desk, customShapes: DeskShape[]): BoundingBox | null {
-  const shape = findShape(desk.shapeId, customShapes);
-  if (!shape) return null;
-  const w = shape.kind === "circle" ? shape.width : shape.width;
-  const h = shape.kind === "circle" ? shape.width : shape.height;
+export function deskBounds(desk: Desk): BoundingBox {
   return {
     left: desk.x,
-    right: desk.x + w,
+    right: desk.x + desk.width,
     top: desk.y,
-    bottom: desk.y + h,
-    centerX: desk.x + w / 2,
-    centerY: desk.y + h / 2,
+    bottom: desk.y + desk.height,
+    centerX: desk.x + desk.width / 2,
+    centerY: desk.y + desk.height / 2,
   };
 }
 
@@ -50,27 +44,20 @@ export function snapDeskPosition(
   proposedX: number,
   proposedY: number,
   others: Desk[],
-  customShapes: DeskShape[],
 ): SnapResult {
-  const shape = findShape(desk.shapeId, customShapes);
-  if (!shape) return { x: snapToGrid(proposedX), y: snapToGrid(proposedY), guides: [] };
-  const w = shape.kind === "circle" ? shape.width : shape.width;
-  const h = shape.kind === "circle" ? shape.width : shape.height;
+  const w = desk.width;
+  const h = desk.height;
 
-  const otherBounds = others
-    .filter((d) => d.id !== desk.id)
-    .map((d) => deskBounds(d, customShapes))
-    .filter((b): b is BoundingBox => b !== null);
+  const otherBounds = others.filter((d) => d.id !== desk.id).map(deskBounds);
 
   let bestX = snapToGrid(proposedX);
   let bestY = snapToGrid(proposedY);
   const guides: Guide[] = [];
 
-  // X-axis candidates: my left, my centerX, my right.
   const myXCandidates = (x: number) => [
-    { mine: "left" as const, value: x },
-    { mine: "center" as const, value: x + w / 2 },
-    { mine: "right" as const, value: x + w },
+    { value: x },
+    { value: x + w / 2 },
+    { value: x + w },
   ];
 
   let bestDx = SNAP_THRESHOLD + 1;
@@ -86,7 +73,6 @@ export function snapDeskPosition(
   }
   if (Math.abs(bestDx) <= SNAP_THRESHOLD) {
     bestX = proposedX + bestDx;
-    // Re-determine which line was hit for the guide:
     for (const cand of myXCandidates(bestX)) {
       for (const b of otherBounds) {
         for (const target of [b.left, b.centerX, b.right]) {
@@ -97,9 +83,9 @@ export function snapDeskPosition(
   }
 
   const myYCandidates = (y: number) => [
-    { mine: "top" as const, value: y },
-    { mine: "middle" as const, value: y + h / 2 },
-    { mine: "bottom" as const, value: y + h },
+    { value: y },
+    { value: y + h / 2 },
+    { value: y + h },
   ];
 
   let bestDy = SNAP_THRESHOLD + 1;

@@ -1,13 +1,11 @@
 import { useEffect, useRef } from "react";
-import { Group, Rect, Circle, Text, Transformer } from "react-konva";
+import { Group, Rect, Circle, RegularPolygon, Text, Transformer } from "react-konva";
 import type Konva from "konva";
-import type { Desk, DeskShape, SeatId, Student, StudentId, ClassId } from "@/types";
-import { findShape } from "@/lib/shapes";
+import type { Desk, SeatId, Student, StudentId, ClassId } from "@/types";
 import { useAppStore } from "@/store/appStore";
 
 interface Props {
   desk: Desk;
-  customShapes: DeskShape[];
   selected: boolean;
   onSelect: (additive: boolean) => void;
   students: Student[];
@@ -20,7 +18,6 @@ interface Props {
 
 export default function DeskNode({
   desk,
-  customShapes,
   selected,
   onSelect,
   students,
@@ -37,8 +34,6 @@ export default function DeskNode({
   const setDeskFrontRow = useAppStore((s) => s.setDeskFrontRow);
   const setSeatFrontRow = useAppStore((s) => s.setSeatFrontRow);
 
-  const shape = findShape(desk.shapeId, customShapes);
-
   useEffect(() => {
     if (selected && transformerRef.current && groupRef.current) {
       transformerRef.current.nodes([groupRef.current]);
@@ -46,9 +41,10 @@ export default function DeskNode({
     }
   }, [selected]);
 
-  if (!shape) return null;
-
   const allFront = desk.seats.length > 0 && desk.seats.every((s) => s.isFrontRow);
+  const fill = selected ? "#e0f2fe" : "#f1f5f9";
+  const stroke = selected ? "#0284c7" : "#475569";
+  const strokeWidth = selected ? 2 : 1;
 
   return (
     <>
@@ -87,27 +83,7 @@ export default function DeskNode({
           updateDesk(classId, desk.id, { x: node.x(), y: node.y(), rotation: node.rotation() });
         }}
       >
-        {shape.kind === "circle" ? (
-          <Circle
-            x={shape.width / 2}
-            y={shape.width / 2}
-            radius={shape.width / 2}
-            fill={selected ? "#e0f2fe" : "#f1f5f9"}
-            stroke={selected ? "#0284c7" : "#475569"}
-            strokeWidth={selected ? 2 : 1}
-          />
-        ) : (
-          <Rect
-            x={0}
-            y={0}
-            width={shape.width}
-            height={shape.height}
-            fill={selected ? "#e0f2fe" : "#f1f5f9"}
-            stroke={selected ? "#0284c7" : "#475569"}
-            strokeWidth={selected ? 2 : 1}
-            cornerRadius={4}
-          />
-        )}
+        <DeskShapeRenderer desk={desk} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
 
         {desk.seats.map((seat) => {
           const studentId = assignments[seat.id];
@@ -172,4 +148,63 @@ export default function DeskNode({
       )}
     </>
   );
+}
+
+function DeskShapeRenderer({
+  desk,
+  fill,
+  stroke,
+  strokeWidth,
+}: {
+  desk: Desk;
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+}) {
+  switch (desk.kind) {
+    case "single-rect":
+    case "multi-rect":
+    case "multi-square":
+      return (
+        <Rect
+          x={0}
+          y={0}
+          width={desk.width}
+          height={desk.height}
+          fill={fill}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          cornerRadius={4}
+        />
+      );
+    case "single-circle":
+    case "multi-circle":
+      return (
+        <Circle
+          x={desk.width / 2}
+          y={desk.height / 2}
+          radius={desk.width / 2}
+          fill={fill}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+        />
+      );
+    case "single-triangle": {
+      // For an equilateral triangle with apex up: centroid sits at 2/3 down from the apex,
+      // and the circumradius equals that same distance. Konva's RegularPolygon is centered
+      // on its centroid and at rotation 0 has a vertex pointing up.
+      const r = (desk.height * 2) / 3;
+      return (
+        <RegularPolygon
+          x={desk.width / 2}
+          y={r}
+          sides={3}
+          radius={r}
+          fill={fill}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+        />
+      );
+    }
+  }
 }

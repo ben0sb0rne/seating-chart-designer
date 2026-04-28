@@ -1,10 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { assign } from "@/lib/assign";
-import type { Desk, DeskShape, Room, Seat, Student } from "@/types";
-
-const rectShape: DeskShape = {
-  id: "single", name: "Single", kind: "rect", width: 60, height: 50, seatCount: 1, builtIn: true,
-};
+import type { Desk, Room, Seat, Student } from "@/types";
 
 let counter = 0;
 const sid = () => `s-${counter++}`;
@@ -13,8 +9,25 @@ function seat(opts?: Partial<Seat>): Seat {
   return { id: sid(), offsetX: 30, offsetY: 25, isFrontRow: false, ...opts };
 }
 
-function desk(x: number, y: number, seats: Seat[]): Desk {
-  return { id: sid(), shapeId: rectShape.id, x, y, rotation: 0, seats };
+/** Build a single-student rectangle desk for tests. */
+function singleDesk(x: number, y: number, s: Seat = seat()): Desk {
+  return { id: sid(), kind: "single-rect", x, y, rotation: 0, width: 60, height: 50, seats: [s] };
+}
+
+/** Build a multi-rect desk with given seats (positions provided by caller). */
+function multiDesk(x: number, y: number, seats: Seat[], rows = 1, cols = 2): Desk {
+  return {
+    id: sid(),
+    kind: "multi-rect",
+    x,
+    y,
+    rotation: 0,
+    width: cols * 50,
+    height: rows * 40,
+    rows,
+    cols,
+    seats,
+  };
 }
 
 function student(name: string, opts?: Partial<Student>): Student {
@@ -30,7 +43,7 @@ describe("assign", () => {
     counter = 0;
     const s1 = seat();
     const s2 = seat();
-    const r = room([desk(0, 0, [s1]), desk(100, 0, [s2])]);
+    const r = room([singleDesk(0, 0, s1), singleDesk(100, 0, s2)]);
     const a = student("A");
     const b = student("B");
     const result = assign({ room: r, students: [a, b], history: [] });
@@ -40,7 +53,7 @@ describe("assign", () => {
 
   it("fails when too many students", () => {
     counter = 0;
-    const r = room([desk(0, 0, [seat()])]);
+    const r = room([singleDesk(0, 0)]);
     const result = assign({ room: r, students: [student("A"), student("B")], history: [] });
     expect(result.ok).toBe(false);
   });
@@ -52,10 +65,10 @@ describe("assign", () => {
     const back1 = seat();
     const back2 = seat();
     const r = room([
-      desk(0, 0, [front1]),
-      desk(100, 0, [front2]),
-      desk(0, 200, [back1]),
-      desk(100, 200, [back2]),
+      singleDesk(0, 0, front1),
+      singleDesk(100, 0, front2),
+      singleDesk(0, 200, back1),
+      singleDesk(100, 200, back2),
     ]);
     const f = student("F", { needsFrontRow: true });
     const x = student("X");
@@ -73,7 +86,7 @@ describe("assign", () => {
     counter = 0;
     const front = seat({ isFrontRow: true });
     const back = seat();
-    const r = room([desk(0, 0, [front]), desk(0, 200, [back])]);
+    const r = room([singleDesk(0, 0, front), singleDesk(0, 200, back)]);
     const result = assign({
       room: r,
       students: [student("F1", { needsFrontRow: true }), student("F2", { needsFrontRow: true })],
@@ -85,13 +98,13 @@ describe("assign", () => {
 
   it("never seats Keep Apart pair in same multi-seat desk", () => {
     counter = 0;
-    const s1 = seat({ offsetX: 10, offsetY: 25 });
-    const s2 = seat({ offsetX: 50, offsetY: 25 });
-    const s3 = seat({ offsetX: 30, offsetY: 25 });
-    // Two-seat desk + a far-away single desk.
-    const r = room([desk(0, 0, [s1, s2]), desk(500, 500, [s3])]);
+    const s1 = seat({ offsetX: 12, offsetY: 20 });
+    const s2 = seat({ offsetX: 38, offsetY: 20 });
+    const s3 = seat();
+    // Two-seat multi-rect + a far-away single desk.
+    const r = room([multiDesk(0, 0, [s1, s2], 1, 2), singleDesk(500, 500, s3)]);
     const a = student("A");
-    const b = student("B", { keepApart: [] });
+    const b = student("B");
     a.keepApart = [b.id];
     b.keepApart = [a.id];
     const c = student("C");
@@ -100,7 +113,6 @@ describe("assign", () => {
     if (result.ok) {
       const seatA = Object.entries(result.assignments).find(([, id]) => id === a.id)?.[0];
       const seatB = Object.entries(result.assignments).find(([, id]) => id === b.id)?.[0];
-      // A and B must NOT be the two seats of the first desk.
       const sameDesk = (seatA === s1.id && seatB === s2.id) || (seatA === s2.id && seatB === s1.id);
       expect(sameDesk).toBe(false);
     }
@@ -108,10 +120,9 @@ describe("assign", () => {
 
   it("fails when keep-apart graph is unsatisfiable for a single-desk room", () => {
     counter = 0;
-    // 1 two-seat desk, two students who must be apart, no other seats.
-    const s1 = seat({ offsetX: 10, offsetY: 25 });
-    const s2 = seat({ offsetX: 50, offsetY: 25 });
-    const r = room([desk(0, 0, [s1, s2])]);
+    const s1 = seat({ offsetX: 12, offsetY: 20 });
+    const s2 = seat({ offsetX: 38, offsetY: 20 });
+    const r = room([multiDesk(0, 0, [s1, s2], 1, 2)]);
     const a = student("A");
     const b = student("B");
     a.keepApart = [b.id];
@@ -122,7 +133,7 @@ describe("assign", () => {
 
   it("works with empty roster", () => {
     counter = 0;
-    const r = room([desk(0, 0, [seat()])]);
+    const r = room([singleDesk(0, 0)]);
     const result = assign({ room: r, students: [], history: [] });
     expect(result.ok).toBe(true);
     if (result.ok) expect(Object.keys(result.assignments)).toHaveLength(0);

@@ -1,96 +1,126 @@
-import type { DeskShape } from "@/types";
-import { useAppStore } from "@/store/appStore";
+import type { DeskKind } from "@/types";
 
 interface Props {
-  shapes: DeskShape[];
-  onPlace: (shapeId: string) => void;
-  onCreateCustom: () => void;
+  onPlaceSingle: (kind: DeskKind) => void;
+  onOpenMulti: (kind: DeskKind) => void;
 }
 
-export default function DeskPalette({ shapes, onPlace, onCreateCustom }: Props) {
-  const removeCustomShape = useAppStore((s) => s.removeCustomShape);
-  const builtIns = shapes.filter((s) => s.builtIn);
-  const customs = shapes.filter((s) => !s.builtIn);
+interface PaletteItem {
+  kind: DeskKind;
+  label: string;
+  multi: boolean;
+}
 
+const SINGLE_ITEMS: PaletteItem[] = [
+  { kind: "single-rect", label: "Rectangle desk", multi: false },
+  { kind: "single-triangle", label: "Triangle desk", multi: false },
+  { kind: "single-circle", label: "Circle desk", multi: false },
+];
+
+const MULTI_ITEMS: PaletteItem[] = [
+  { kind: "multi-rect", label: "Rectangle table", multi: true },
+  { kind: "multi-square", label: "Square table", multi: true },
+  { kind: "multi-circle", label: "Circle table", multi: true },
+];
+
+export default function DeskPalette({ onPlaceSingle, onOpenMulti }: Props) {
   return (
     <aside className="flex w-56 shrink-0 flex-col border-r border-slate-200 bg-white">
-      <div className="border-b border-slate-200 p-3">
-        <button className="btn-primary w-full" onClick={onCreateCustom}>
-          + Design custom shape
-        </button>
-      </div>
       <div className="flex-1 overflow-auto p-3">
-        <div className="label mb-2">Built-in</div>
-        <ul className="mb-4 space-y-1">
-          {builtIns.map((sh) => (
-            <li key={sh.id}>
+        <div className="label mb-2">Single-student</div>
+        <ul className="mb-5 space-y-1">
+          {SINGLE_ITEMS.map((it) => (
+            <li key={it.kind}>
               <button
                 className="btn-secondary w-full justify-start"
-                onClick={() => onPlace(sh.id)}
+                onClick={() => onPlaceSingle(it.kind)}
                 title="Click to add to room"
               >
-                <ShapePreview shape={sh} />
-                <span className="ml-2 truncate">{sh.name}</span>
+                <ShapeIcon kind={it.kind} />
+                <span className="ml-2 truncate">{it.label}</span>
               </button>
             </li>
           ))}
         </ul>
-        {customs.length > 0 && (
-          <>
-            <div className="label mb-2">Your shapes</div>
-            <ul className="space-y-1">
-              {customs.map((sh) => (
-                <li key={sh.id} className="flex items-center gap-1">
-                  <button
-                    className="btn-secondary flex-1 justify-start"
-                    onClick={() => onPlace(sh.id)}
-                  >
-                    <ShapePreview shape={sh} />
-                    <span className="ml-2 truncate">{sh.name}</span>
-                  </button>
-                  <button
-                    className="btn-secondary px-2 text-xs"
-                    onClick={() => {
-                      if (confirm(`Delete shape "${sh.name}"?`)) removeCustomShape(sh.id);
-                    }}
-                    title="Delete shape"
-                  >
-                    ×
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </>
-        )}
+
+        <div className="label mb-2">Multi-student</div>
+        <ul className="space-y-1">
+          {MULTI_ITEMS.map((it) => (
+            <li key={it.kind}>
+              <button
+                className="btn-secondary w-full justify-start"
+                onClick={() => onOpenMulti(it.kind)}
+                title="Click to configure and add"
+              >
+                <ShapeIcon kind={it.kind} />
+                <span className="ml-2 flex-1 truncate text-left">{it.label}</span>
+                <span className="ml-1 text-xs text-ink-muted">…</span>
+              </button>
+            </li>
+          ))}
+        </ul>
       </div>
       <div className="border-t border-slate-200 p-3 text-xs text-ink-muted">
-        Click a shape to drop it into the room. Drag to position; rotate via the handle. Press Delete to remove.
+        Single-student desks drop directly. Multi-student tables ask for parameters first. Drag any desk to reposition; rotate via the handle. Press Delete to remove.
       </div>
     </aside>
   );
 }
 
-function ShapePreview({ shape }: { shape: DeskShape }) {
+function ShapeIcon({ kind }: { kind: DeskKind }) {
+  const stroke = "#475569";
+  const fill = "#e2e8f0";
   const size = 18;
-  return (
-    <span className="inline-flex h-5 w-5 items-center justify-center" aria-hidden>
-      {shape.kind === "circle" ? (
-        <svg width={size} height={size} viewBox="0 0 20 20">
-          <circle cx="10" cy="10" r="8" fill="#e2e8f0" stroke="#475569" />
+  switch (kind) {
+    case "single-rect":
+      return (
+        <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
+          <rect x="4" y="6" width="12" height="8" fill={fill} stroke={stroke} rx="1" />
         </svg>
-      ) : (
-        <svg width={size} height={size} viewBox="0 0 20 20">
-          <rect
-            x="2"
-            y={shape.height < shape.width ? 6 : 2}
-            width="16"
-            height={shape.height < shape.width ? 8 : 16}
-            fill="#e2e8f0"
-            stroke="#475569"
-            rx="1"
-          />
+      );
+    case "single-triangle":
+      return (
+        <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
+          <polygon points="10,3 17,16 3,16" fill={fill} stroke={stroke} strokeLinejoin="round" />
         </svg>
-      )}
-    </span>
-  );
+      );
+    case "single-circle":
+      return (
+        <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
+          <circle cx="10" cy="10" r="6" fill={fill} stroke={stroke} />
+        </svg>
+      );
+    case "multi-rect":
+      return (
+        <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
+          <rect x="2" y="6" width="16" height="8" fill={fill} stroke={stroke} rx="1" />
+          <circle cx="6" cy="9" r="1" fill="#fff" stroke={stroke} />
+          <circle cx="10" cy="9" r="1" fill="#fff" stroke={stroke} />
+          <circle cx="14" cy="9" r="1" fill="#fff" stroke={stroke} />
+          <circle cx="6" cy="12" r="1" fill="#fff" stroke={stroke} />
+          <circle cx="10" cy="12" r="1" fill="#fff" stroke={stroke} />
+          <circle cx="14" cy="12" r="1" fill="#fff" stroke={stroke} />
+        </svg>
+      );
+    case "multi-square":
+      return (
+        <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
+          <rect x="4" y="4" width="12" height="12" fill={fill} stroke={stroke} rx="1" />
+          <circle cx="10" cy="5" r="1" fill="#fff" stroke={stroke} />
+          <circle cx="15" cy="10" r="1" fill="#fff" stroke={stroke} />
+          <circle cx="10" cy="15" r="1" fill="#fff" stroke={stroke} />
+          <circle cx="5" cy="10" r="1" fill="#fff" stroke={stroke} />
+        </svg>
+      );
+    case "multi-circle":
+      return (
+        <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
+          <circle cx="10" cy="10" r="6" fill={fill} stroke={stroke} />
+          <circle cx="10" cy="5" r="1" fill="#fff" stroke={stroke} />
+          <circle cx="14" cy="10" r="1" fill="#fff" stroke={stroke} />
+          <circle cx="10" cy="15" r="1" fill="#fff" stroke={stroke} />
+          <circle cx="6" cy="10" r="1" fill="#fff" stroke={stroke} />
+        </svg>
+      );
+  }
 }

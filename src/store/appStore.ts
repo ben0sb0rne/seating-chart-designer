@@ -3,11 +3,11 @@ import { persist } from "zustand/middleware";
 import type {
   AppState,
   Arrangement,
+  ArrangementId,
   ClassId,
   ClassRoom,
   Desk,
   DeskId,
-  DeskShape,
   Room,
   Seat,
   SeatId,
@@ -41,20 +41,16 @@ interface AppActions {
   setDeskFrontRow: (classId: ClassId, deskId: DeskId, value: boolean) => void;
   updateSeat: (classId: ClassId, deskId: DeskId, seatId: SeatId, patch: Partial<Seat>) => void;
 
-  // Custom shapes
-  addCustomShape: (shape: DeskShape) => void;
-  removeCustomShape: (shapeId: string) => void;
-
   // Arrangements
-  saveArrangement: (classId: ClassId, assignments: Record<SeatId, StudentId>, label?: string) => ArrangementResult;
-  deleteArrangement: (classId: ClassId, arrangementId: string) => void;
+  saveArrangement: (
+    classId: ClassId,
+    assignments: Record<SeatId, StudentId>,
+    label?: string,
+  ) => { id: ArrangementId };
+  deleteArrangement: (classId: ClassId, arrangementId: ArrangementId) => void;
 
   // Bulk
   replaceState: (next: AppState) => void;
-}
-
-interface ArrangementResult {
-  id: string;
 }
 
 export type AppStore = AppState & AppActions;
@@ -67,11 +63,86 @@ function withClass(state: AppState, id: ClassId, mutate: (c: ClassRoom) => Class
   return { ...state, classes: state.classes.map((c) => (c.id === id ? mutate(c) : c)) };
 }
 
+/**
+ * Migrate persisted state from v1 (DeskShape-based) to v2 (kind-on-Desk).
+ * - Built-in shape ids map to specific kinds & params.
+ * - Custom shapes are dropped (best-effort fallback to single-rect; user warned).
+ */
+function migrateV1toV2(persisted: unknown): AppState {
+  const obj = persisted as Record<string, unknown>;
+  const classes = (obj.classes ?? []) as Array<Record<string, unknown>>;
+  let droppedCustomShapes = 0;
+
+  const migratedClasses: ClassRoom[] = classes.map((klass) => {
+    const room = (klass.room ?? { width: 1000, height: 700, desks: [] }) as {
+      width: number;
+      height: number;
+      desks: Array<Record<string, unknown>>;
+    };
+    const desks: Desk[] = (room.desks ?? []).map((d) => migrateDesk(d, () => droppedCustomShapes++));
+    return {
+      id: klass.id as string,
+      name: klass.name as string,
+      students: (klass.students as Student[]) ?? [],
+      room: { width: room.width, height: room.height, desks },
+      arrangements: (klass.arrangements as Arrangement[]) ?? [],
+    };
+  });
+
+  if (droppedCustomShapes > 0 && typeof window !== "undefined") {
+    setTimeout(() => {
+      window.alert(
+        `Note: ${droppedCustomShapes} custom-shape desk${droppedCustomShapes === 1 ? "" : "s"} from a previous version ` +
+          `couldn't be migrated cleanly and were converted to single-student desks. You can replace them using the new shape palette.`,
+      );
+    }, 500);
+  }
+
+  return {
+    classes: migratedClasses,
+    activeClassId: (obj.activeClassId as string | null) ?? null,
+    schemaVersion: SCHEMA_VERSION,
+  };
+}
+
+function migrateDesk(d: Record<string, unknown>, onCustomDropped: () => void): Desk {
+  // If the desk already has a `kind` field, it's already v2 — pass through.
+  if (typeof d.kind === "string") {
+    return d as unknown as Desk;
+  }
+  const shapeId = d.shapeId as string | undefined;
+  const seats = (d.seats as Seat[]) ?? [];
+  const x = (d.x as number) ?? 0;
+  const y = (d.y as number) ?? 0;
+  const rotation = (d.rotation as number) ?? 0;
+  const id = (d.id as string) ?? uid();
+
+  const base = { id, x, y, rotation, seats };
+
+  switch (shapeId) {
+    case "single":
+      return { ...base, kind: "single-rect", width: 60, height: 50 };
+    case "paired":
+      return { ...base, kind: "multi-rect", width: 100, height: 40, rows: 1, cols: 2 };
+    case "table-rect-4":
+      return { ...base, kind: "multi-rect", width: 100, height: 80, rows: 2, cols: 2 };
+    case "table-rect-6":
+      return { ...base, kind: "multi-rect", width: 150, height: 80, rows: 2, cols: 3 };
+    case "table-round-4":
+      return { ...base, kind: "multi-circle", width: 120, height: 120, seatCount: 4 };
+    case "table-round-6":
+      return { ...base, kind: "multi-circle", width: 162, height: 162, seatCount: 6 };
+    default:
+      // Unknown / custom shape — fall back to single-rect.
+      onCustomDropped();
+      return { ...base, kind: "single-rect", width: 60, height: 50 };
+  }
+}
+
 export const useAppStore = create<AppStore>()(
   persist(
     (set) => ({
       classes: [],
-      customShapes: [],
       activeClassId: null,
       schemaVersion: SCHEMA_VERSION,
 
@@ -223,11 +294,6 @@ export const useAppStore = create<AppStore>()(
           })),
         ),
 
-      addCustomShape: (shape) => set((s) => ({ ...s, customShapes: [...s.customShapes, shape] })),
-
-      removeCustomShape: (shapeId) =>
-        set((s) => ({ ...s, customShapes: s.customShapes.filter((sh) => sh.id !== shapeId) })),
-
       saveArrangement: (classId, assignments, label) => {
         const id = uid();
         const arr: Arrangement = { id, createdAt: new Date().toISOString(), label, assignments: { ...assignments } };
@@ -248,11 +314,14 @@ export const useAppStore = create<AppStore>()(
     {
       name: "seating-chart-designer:v1",
       version: SCHEMA_VERSION,
+      migrate: (persisted, fromVersion) => {
+        if (fromVersion < 2) return migrateV1toV2(persisted);
+        return persisted as AppState;
+      },
     },
   ),
 );
 
-// Selector helpers
 export const selectClass = (id: ClassId | null) => (s: AppStore): ClassRoom | undefined =>
   id ? findClass(s, id) : undefined;
 

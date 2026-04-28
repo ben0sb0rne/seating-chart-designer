@@ -2,7 +2,6 @@ export type ClassId = string;
 export type StudentId = string;
 export type DeskId = string;
 export type SeatId = string;
-export type ShapeId = string;
 export type ArrangementId = string;
 
 export interface Student {
@@ -20,25 +19,29 @@ export interface Seat {
   isFrontRow: boolean;
 }
 
+export type DeskKind =
+  | "single-rect"
+  | "single-triangle"
+  | "single-circle"
+  | "multi-rect"
+  | "multi-square"
+  | "multi-circle";
+
 export interface Desk {
   id: DeskId;
-  shapeId: ShapeId;
+  kind: DeskKind;
   x: number;
   y: number;
   rotation: number;
-  seats: Seat[];
-}
-
-export type DeskShapeKind = "rect" | "circle";
-
-export interface DeskShape {
-  id: ShapeId;
-  name: string;
-  kind: DeskShapeKind;
+  /** Visual bounding box. Used for snap, hit-testing, and rendering. */
   width: number;
   height: number;
-  seatCount: number;
-  builtIn: boolean;
+  /** Parameters for multi-* kinds. Omitted/ignored for single-* kinds. */
+  rows?: number;        // multi-rect
+  cols?: number;        // multi-rect
+  perSide?: number;     // multi-square
+  seatCount?: number;   // multi-circle
+  seats: Seat[];
 }
 
 export interface Room {
@@ -62,11 +65,10 @@ export interface ClassRoom {
   arrangements: Arrangement[];
 }
 
-export const SCHEMA_VERSION = 1 as const;
+export const SCHEMA_VERSION = 2 as const;
 
 export interface AppState {
   classes: ClassRoom[];
-  customShapes: DeskShape[];
   activeClassId: ClassId | null;
   schemaVersion: typeof SCHEMA_VERSION;
 }

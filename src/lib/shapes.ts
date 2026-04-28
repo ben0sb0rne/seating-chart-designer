@@ -1,75 +1,152 @@
-import type { Desk, DeskShape, Seat, ShapeId } from "@/types";
+import type { Desk, DeskKind, Seat } from "@/types";
 
 const uid = () => crypto.randomUUID();
 
-export const BUILT_IN_SHAPES: DeskShape[] = [
-  { id: "single", name: "Single desk", kind: "rect", width: 60, height: 50, seatCount: 1, builtIn: true },
-  { id: "paired", name: "Paired desks", kind: "rect", width: 120, height: 50, seatCount: 2, builtIn: true },
-  { id: "table-rect-4", name: "Rect table (4)", kind: "rect", width: 140, height: 80, seatCount: 4, builtIn: true },
-  { id: "table-rect-6", name: "Rect table (6)", kind: "rect", width: 200, height: 80, seatCount: 6, builtIn: true },
-  { id: "table-round-4", name: "Round table (4)", kind: "circle", width: 120, height: 120, seatCount: 4, builtIn: true },
-  { id: "table-round-6", name: "Round table (6)", kind: "circle", width: 140, height: 140, seatCount: 6, builtIn: true },
-];
+export interface MultiRectParams {
+  rows: number;
+  cols: number;
+}
+export interface MultiSquareParams {
+  perSide: number;
+}
+export interface MultiCircleParams {
+  seatCount: number;
+}
+export type ShapeParams = MultiRectParams | MultiSquareParams | MultiCircleParams | undefined;
 
-export function findShape(shapeId: ShapeId, customShapes: DeskShape[]): DeskShape | undefined {
-  return BUILT_IN_SHAPES.find((s) => s.id === shapeId) ?? customShapes.find((s) => s.id === shapeId);
+export interface LaidOutShape {
+  width: number;
+  height: number;
+  seats: Seat[];
 }
 
-/** Lay out N seats inside the shape's local coordinate space (origin at top-left). */
-export function layoutSeats(shape: DeskShape): Seat[] {
-  if (shape.seatCount <= 0) return [];
-  if (shape.kind === "circle") {
-    return layoutSeatsCircle(shape);
-  }
-  return layoutSeatsRect(shape);
-}
-
-function layoutSeatsRect(shape: DeskShape): Seat[] {
-  const { width, height, seatCount } = shape;
-  // Choose a grid that's roughly proportional to the rectangle.
-  const aspect = width / height;
-  const cols = Math.max(1, Math.round(Math.sqrt(seatCount * aspect)));
-  const rows = Math.max(1, Math.ceil(seatCount / cols));
-  const seats: Seat[] = [];
-  let placed = 0;
-  for (let r = 0; r < rows && placed < seatCount; r++) {
-    const remaining = seatCount - placed;
-    const colsThisRow = Math.min(cols, remaining);
-    for (let c = 0; c < colsThisRow; c++) {
-      const x = ((c + 0.5) / colsThisRow) * width;
-      const y = ((r + 0.5) / rows) * height;
-      seats.push({ id: uid(), offsetX: x, offsetY: y, isFrontRow: false });
-      placed++;
-    }
-  }
-  return seats;
-}
-
-function layoutSeatsCircle(shape: DeskShape): Seat[] {
-  const { width, seatCount } = shape;
-  const cx = width / 2;
-  const cy = width / 2;
-  const r = width * 0.42;
-  const seats: Seat[] = [];
-  for (let i = 0; i < seatCount; i++) {
-    const angle = (i / seatCount) * Math.PI * 2 - Math.PI / 2;
-    seats.push({
-      id: uid(),
-      offsetX: cx + r * Math.cos(angle),
-      offsetY: cy + r * Math.sin(angle),
-      isFrontRow: false,
-    });
-  }
-  return seats;
-}
-
-export function makeDesk(shape: DeskShape, x: number, y: number): Desk {
-  return {
+/** Build a Desk for a given kind+params at the given position. */
+export function makeDesk(kind: DeskKind, params: ShapeParams, x: number, y: number): Desk {
+  const layout = layoutDesk(kind, params);
+  const desk: Desk = {
     id: uid(),
-    shapeId: shape.id,
+    kind,
     x,
     y,
     rotation: 0,
-    seats: layoutSeats(shape),
+    width: layout.width,
+    height: layout.height,
+    seats: layout.seats,
   };
+  if (kind === "multi-rect") {
+    const p = params as MultiRectParams;
+    desk.rows = p.rows;
+    desk.cols = p.cols;
+  } else if (kind === "multi-square") {
+    desk.perSide = (params as MultiSquareParams).perSide;
+  } else if (kind === "multi-circle") {
+    desk.seatCount = (params as MultiCircleParams).seatCount;
+  }
+  return desk;
+}
+
+/** Compute width, height, and seat positions for a desk kind+params. */
+export function layoutDesk(kind: DeskKind, params: ShapeParams): LaidOutShape {
+  switch (kind) {
+    case "single-rect":
+      return { width: 60, height: 50, seats: [seatAt(30, 25)] };
+    case "single-triangle": {
+      // Equilateral triangle, base 70, height ~60. Seat at centroid.
+      const w = 70;
+      const h = 60;
+      return { width: w, height: h, seats: [seatAt(w / 2, h * 2 / 3)] };
+    }
+    case "single-circle":
+      return { width: 50, height: 50, seats: [seatAt(25, 25)] };
+    case "multi-rect":
+      return layoutMultiRect(params as MultiRectParams);
+    case "multi-square":
+      return layoutMultiSquare(params as MultiSquareParams);
+    case "multi-circle":
+      return layoutMultiCircle(params as MultiCircleParams);
+  }
+}
+
+function seatAt(x: number, y: number): Seat {
+  return { id: uid(), offsetX: x, offsetY: y, isFrontRow: false };
+}
+
+const CELL_W = 50;
+const CELL_H = 40;
+
+function layoutMultiRect({ rows, cols }: MultiRectParams): LaidOutShape {
+  const r = clamp(rows, 1, 10);
+  const c = clamp(cols, 1, 10);
+  const width = c * CELL_W;
+  const height = r * CELL_H;
+  const seats: Seat[] = [];
+  for (let row = 0; row < r; row++) {
+    for (let col = 0; col < c; col++) {
+      seats.push(seatAt((col + 0.5) * CELL_W, (row + 0.5) * CELL_H));
+    }
+  }
+  return { width, height, seats };
+}
+
+function layoutMultiSquare({ perSide }: MultiSquareParams): LaidOutShape {
+  const n = clamp(perSide, 1, 6);
+  const side = Math.max(120, n * 36 + 24);
+  const inset = 14;
+  const seats: Seat[] = [];
+  // For each side, place n seats evenly between corners (excluding corners).
+  // Top edge (y = inset), Right edge (x = side - inset), Bottom edge (y = side - inset), Left edge (x = inset).
+  for (let i = 1; i <= n; i++) {
+    const t = i / (n + 1); // fractional position along the edge
+    seats.push(seatAt(t * side, inset));            // top
+  }
+  for (let i = 1; i <= n; i++) {
+    const t = i / (n + 1);
+    seats.push(seatAt(side - inset, t * side));    // right
+  }
+  for (let i = 1; i <= n; i++) {
+    const t = i / (n + 1);
+    seats.push(seatAt((1 - t) * side, side - inset)); // bottom (reversed for clockwise order)
+  }
+  for (let i = 1; i <= n; i++) {
+    const t = i / (n + 1);
+    seats.push(seatAt(inset, (1 - t) * side));     // left
+  }
+  return { width: side, height: side, seats };
+}
+
+function layoutMultiCircle({ seatCount }: MultiCircleParams): LaidOutShape {
+  const n = clamp(seatCount, 3, 20);
+  const diameter = Math.max(120, n * 22 + 40);
+  const cx = diameter / 2;
+  const cy = diameter / 2;
+  const r = diameter * 0.42;
+  const seats: Seat[] = [];
+  for (let i = 0; i < n; i++) {
+    const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
+    seats.push(seatAt(cx + r * Math.cos(angle), cy + r * Math.sin(angle)));
+  }
+  return { width: diameter, height: diameter, seats };
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
+
+/** True if the kind requires the user to pick parameters before placement. */
+export function isMultiKind(kind: DeskKind): boolean {
+  return kind === "multi-rect" || kind === "multi-square" || kind === "multi-circle";
+}
+
+/** Default params used for previews and as initial values in the params dialog. */
+export function defaultParamsFor(kind: DeskKind): ShapeParams {
+  switch (kind) {
+    case "multi-rect":
+      return { rows: 2, cols: 3 };
+    case "multi-square":
+      return { perSide: 2 };
+    case "multi-circle":
+      return { seatCount: 6 };
+    default:
+      return undefined;
+  }
 }

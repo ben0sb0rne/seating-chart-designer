@@ -1,13 +1,11 @@
 import { useNavigate, useParams } from "react-router-dom";
 import { useAppStore } from "@/store/appStore";
-import { findShape } from "@/lib/shapes";
-import type { Arrangement, ClassRoom } from "@/types";
+import type { Arrangement, ClassRoom, Desk } from "@/types";
 
 export default function History() {
   const { id } = useParams();
   const navigate = useNavigate();
   const klass = useAppStore((s) => (id ? s.classes.find((c) => c.id === id) : undefined));
-  const customShapes = useAppStore((s) => s.customShapes);
   const deleteArrangement = useAppStore((s) => s.deleteArrangement);
 
   if (!klass) return <div className="p-6 text-ink-muted">Class not found.</div>;
@@ -27,7 +25,7 @@ export default function History() {
           {klass.arrangements.map((arr) => (
             <li key={arr.id} className="card overflow-hidden">
               <div className="aspect-[4/3] bg-slate-50">
-                <Thumbnail klass={klass} arrangement={arr} customShapes={customShapes} />
+                <Thumbnail klass={klass} arrangement={arr} />
               </div>
               <div className="p-3">
                 <div className="flex items-start justify-between">
@@ -67,15 +65,7 @@ export default function History() {
   );
 }
 
-function Thumbnail({
-  klass,
-  arrangement,
-  customShapes,
-}: {
-  klass: ClassRoom;
-  arrangement: Arrangement;
-  customShapes: import("@/types").DeskShape[];
-}) {
+function Thumbnail({ klass, arrangement }: { klass: ClassRoom; arrangement: Arrangement }) {
   const w = klass.room.width;
   const h = klass.room.height;
   return (
@@ -83,16 +73,13 @@ function Thumbnail({
       <rect x={0} y={0} width={w} height={h} fill="#fafaf7" />
       <line x1={0} y1={0} x2={w} y2={0} stroke="#0f172a" strokeWidth={6} strokeDasharray="14 8" />
       {klass.room.desks.map((desk) => {
-        const shape = findShape(desk.shapeId, customShapes);
-        if (!shape) return null;
-        const transform = `translate(${desk.x} ${desk.y}) rotate(${desk.rotation} ${shape.width / 2} ${(shape.kind === "circle" ? shape.width : shape.height) / 2})`;
+        const cy = (desk.kind === "single-circle" || desk.kind === "multi-circle")
+          ? desk.height / 2
+          : desk.height / 2;
+        const transform = `translate(${desk.x} ${desk.y}) rotate(${desk.rotation} ${desk.width / 2} ${cy})`;
         return (
           <g key={desk.id} transform={transform}>
-            {shape.kind === "circle" ? (
-              <circle cx={shape.width / 2} cy={shape.width / 2} r={shape.width / 2} fill="#f1f5f9" stroke="#475569" />
-            ) : (
-              <rect x={0} y={0} width={shape.width} height={shape.height} fill="#f1f5f9" stroke="#475569" rx={4} />
-            )}
+            <DeskOutline desk={desk} />
             {desk.seats.map((seat) => {
               const studentId = arrangement.assignments[seat.id];
               const occupied = !!studentId;
@@ -112,4 +99,35 @@ function Thumbnail({
       })}
     </svg>
   );
+}
+
+function DeskOutline({ desk }: { desk: Desk }) {
+  switch (desk.kind) {
+    case "single-rect":
+    case "multi-rect":
+    case "multi-square":
+      return (
+        <rect x={0} y={0} width={desk.width} height={desk.height} fill="#f1f5f9" stroke="#475569" rx={4} />
+      );
+    case "single-circle":
+    case "multi-circle":
+      return (
+        <circle cx={desk.width / 2} cy={desk.height / 2} r={desk.width / 2} fill="#f1f5f9" stroke="#475569" />
+      );
+    case "single-triangle": {
+      const apexX = desk.width / 2;
+      const apexY = 0;
+      const baseLeftX = 0;
+      const baseRightX = desk.width;
+      const baseY = desk.height;
+      return (
+        <polygon
+          points={`${apexX},${apexY} ${baseRightX},${baseY} ${baseLeftX},${baseY}`}
+          fill="#f1f5f9"
+          stroke="#475569"
+          strokeLinejoin="round"
+        />
+      );
+    }
+  }
 }

@@ -4,7 +4,6 @@ import { SCHEMA_VERSION } from "@/types";
 export function exportStateToFile(state: AppState) {
   const payload: AppState = {
     classes: state.classes,
-    customShapes: state.customShapes,
     activeClassId: state.activeClassId,
     schemaVersion: SCHEMA_VERSION,
   };
@@ -40,10 +39,8 @@ function validateAppState(raw: unknown): ParsedImport {
     warnings.push(`Schema version ${version} differs from current (${SCHEMA_VERSION}); attempting to load anyway.`);
   }
   if (!Array.isArray(obj.classes)) throw new Error("Missing 'classes' array");
-  if (!Array.isArray(obj.customShapes)) obj.customShapes = [];
   const state: AppState = {
     classes: obj.classes as AppState["classes"],
-    customShapes: obj.customShapes as AppState["customShapes"],
     activeClassId: typeof obj.activeClassId === "string" ? obj.activeClassId : null,
     schemaVersion: SCHEMA_VERSION,
   };

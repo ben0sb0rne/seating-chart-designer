@@ -1,14 +1,13 @@
 import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import { Stage, Layer, Rect, Line } from "react-konva";
 import type Konva from "konva";
-import type { ClassId, DeskShape, Room, SeatId, Student, StudentId } from "@/types";
+import type { ClassId, Room, SeatId, Student, StudentId } from "@/types";
 import DeskNode from "./DeskNode";
 import SeatPicker from "./SeatPicker";
 import { snapDeskPosition, type Guide } from "@/lib/snap";
 
 interface Props {
   room: Room;
-  customShapes: DeskShape[];
   selectedDeskIds: string[];
   onSelectionChange: (ids: string[]) => void;
   students: Student[];
@@ -18,7 +17,7 @@ interface Props {
 }
 
 const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
-  { room, customShapes, selectedDeskIds, onSelectionChange, students, assignments, onAssignSeat, classId },
+  { room, selectedDeskIds, onSelectionChange, students, assignments, onAssignSeat, classId },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -99,7 +98,6 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
             <DeskNode
               key={desk.id}
               desk={desk}
-              customShapes={customShapes}
               selected={selectedDeskIds.includes(desk.id)}
               onSelect={(additive) => handleSelectDesk(desk.id, additive)}
               students={students}
@@ -111,7 +109,7 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
               onDragMove={(deskId, x, y) => {
                 const d = room.desks.find((dd) => dd.id === deskId);
                 if (!d) return { x, y };
-                const result = snapDeskPosition(d, x, y, room.desks, customShapes);
+                const result = snapDeskPosition(d, x, y, room.desks);
                 setGuides(result.guides);
                 return { x: result.x, y: result.y };
               }}
