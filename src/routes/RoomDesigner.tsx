@@ -19,6 +19,7 @@ export default function RoomDesigner() {
   const addDesk = useAppStore((s) => s.addDesk);
   const addDesks = useAppStore((s) => s.addDesks);
   const removeDesks = useAppStore((s) => s.removeDesks);
+  const updateRoom = useAppStore((s) => s.updateRoom);
   const saveArrangement = useAppStore((s) => s.saveArrangement);
 
   const stageRef = useRef<Konva.Stage>(null);
@@ -153,7 +154,15 @@ export default function RoomDesigner() {
 
   return (
     <div className="flex h-full min-h-0">
-      <DeskPalette onPlaceSingle={handlePlaceSingle} onOpenMulti={handleOpenMulti} />
+      <DeskPalette
+        onPlaceSingle={handlePlaceSingle}
+        onOpenMulti={handleOpenMulti}
+        room={klass.room}
+        onUpdateRoom={(patch) => updateRoom(klass.id, patch)}
+        onRandomize={handleRandomize}
+        onSave={handleSaveArrangement}
+        onExportJpg={handleExportJpg}
+      />
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
         {warning && (
           <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
@@ -178,9 +187,6 @@ export default function RoomDesigner() {
         klass={klass}
         assignments={assignments}
         onAssignSeat={handleAssignSeat}
-        onRandomize={handleRandomize}
-        onSave={handleSaveArrangement}
-        onExportJpg={handleExportJpg}
       />
       <MultiShapeParamsDialog
         open={paramsDialog.open}

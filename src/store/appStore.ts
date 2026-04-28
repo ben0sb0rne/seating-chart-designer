@@ -18,7 +18,7 @@ import { SCHEMA_VERSION } from "@/types";
 
 const uid = () => crypto.randomUUID();
 
-const DEFAULT_ROOM = (): Room => ({ width: 1000, height: 700, desks: [] });
+const DEFAULT_ROOM = (): Room => ({ width: 1000, height: 700, frontWall: "top", desks: [] });
 
 interface AppActions {
   // Class CRUD
@@ -38,6 +38,7 @@ interface AppActions {
   addDesks: (classId: ClassId, desks: Desk[]) => void;
   updateDesk: (classId: ClassId, deskId: DeskId, patch: Partial<Desk>) => void;
   removeDesks: (classId: ClassId, deskIds: DeskId[]) => void;
+  updateRoom: (classId: ClassId, patch: Partial<Room>) => void;
   setSeatFrontRow: (classId: ClassId, deskId: DeskId, seatId: SeatId, value: boolean) => void;
   setDeskFrontRow: (classId: ClassId, deskId: DeskId, value: boolean) => void;
   updateSeat: (classId: ClassId, deskId: DeskId, seatId: SeatId, patch: Partial<Seat>) => void;
@@ -62,6 +63,29 @@ function findClass(state: AppState, id: ClassId): ClassRoom | undefined {
 
 function withClass(state: AppState, id: ClassId, mutate: (c: ClassRoom) => ClassRoom): AppState {
   return { ...state, classes: state.classes.map((c) => (c.id === id ? mutate(c) : c)) };
+}
+
+/** v2 → v3: rooms gain a `frontWall` field. Default to "top" so behavior is unchanged. */
+function migrateV2toV3(persisted: unknown): AppState {
+  const obj = persisted as Record<string, unknown>;
+  const classes = (obj.classes ?? []) as Array<Record<string, unknown>>;
+  const migratedClasses = classes.map((klass) => {
+    const room = (klass.room ?? { width: 1000, height: 700, desks: [] }) as Record<string, unknown>;
+    return {
+      ...(klass as object),
+      room: {
+        width: (room.width as number) ?? 1000,
+        height: (room.height as number) ?? 700,
+        frontWall: (room.frontWall as string) ?? "top",
+        desks: (room.desks as unknown[]) ?? [],
+      },
+    } as ClassRoom;
+  });
+  return {
+    classes: migratedClasses,
+    activeClassId: (obj.activeClassId as string | null) ?? null,
+    schemaVersion: SCHEMA_VERSION,
+  };
 }
 
 /**
@@ -226,6 +250,9 @@ export const useAppStore = create<AppStore>()(
       addDesks: (classId, desks) =>
         set((s) => withClass(s, classId, (c) => ({ ...c, room: { ...c.room, desks: [...c.room.desks, ...desks] } }))),
 
+      updateRoom: (classId, patch) =>
+        set((s) => withClass(s, classId, (c) => ({ ...c, room: { ...c.room, ...patch } }))),
+
       updateDesk: (classId, deskId, patch) =>
         set((s) =>
           withClass(s, classId, (c) => ({
@@ -319,8 +346,10 @@ export const useAppStore = create<AppStore>()(
       name: "seating-chart-designer:v1",
       version: SCHEMA_VERSION,
       migrate: (persisted, fromVersion) => {
-        if (fromVersion < 2) return migrateV1toV2(persisted);
-        return persisted as AppState;
+        let s: unknown = persisted;
+        if (fromVersion < 2) s = migrateV1toV2(s);
+        if (fromVersion < 3) s = migrateV2toV3(s);
+        return s as AppState;
       },
     },
   ),

@@ -1,31 +1,47 @@
-import type { DeskKind } from "@/types";
+import { useState } from "react";
+import type { DeskKind, Room, Wall } from "@/types";
+import { cn } from "@/lib/cn";
 
 interface Props {
   onPlaceSingle: (kind: DeskKind) => void;
   onOpenMulti: (kind: DeskKind) => void;
+  room: Room;
+  onUpdateRoom: (patch: Partial<Room>) => void;
+  onRandomize: () => void;
+  onSave: () => void;
+  onExportJpg: () => void;
 }
 
 interface PaletteItem {
   kind: DeskKind;
   label: string;
-  multi: boolean;
 }
 
 const SINGLE_ITEMS: PaletteItem[] = [
-  { kind: "single-rect", label: "Rectangle desk", multi: false },
-  { kind: "single-triangle", label: "Triangle desk", multi: false },
-  { kind: "single-circle", label: "Circle desk", multi: false },
+  { kind: "single-rect", label: "Rectangle desk" },
+  { kind: "single-triangle", label: "Triangle desk" },
+  { kind: "single-circle", label: "Circle desk" },
 ];
 
 const MULTI_ITEMS: PaletteItem[] = [
-  { kind: "multi-rect", label: "Rectangle table", multi: true },
-  { kind: "multi-square", label: "Square table", multi: true },
-  { kind: "multi-circle", label: "Circle table", multi: true },
+  { kind: "multi-rect", label: "Rectangle table" },
+  { kind: "multi-square", label: "Square table" },
+  { kind: "multi-circle", label: "Circle table" },
 ];
 
-export default function DeskPalette({ onPlaceSingle, onOpenMulti }: Props) {
+export default function DeskPalette({
+  onPlaceSingle,
+  onOpenMulti,
+  room,
+  onUpdateRoom,
+  onRandomize,
+  onSave,
+  onExportJpg,
+}: Props) {
+  const [roomOptsOpen, setRoomOptsOpen] = useState(false);
+
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-slate-200 bg-white">
+    <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
       <div className="flex-1 overflow-auto p-3">
         <div className="label mb-2">Single-student</div>
         <ul className="mb-5 space-y-1">
@@ -44,7 +60,7 @@ export default function DeskPalette({ onPlaceSingle, onOpenMulti }: Props) {
         </ul>
 
         <div className="label mb-2">Multi-student</div>
-        <ul className="space-y-1">
+        <ul className="mb-5 space-y-1">
           {MULTI_ITEMS.map((it) => (
             <li key={it.kind}>
               <button
@@ -59,18 +75,98 @@ export default function DeskPalette({ onPlaceSingle, onOpenMulti }: Props) {
             </li>
           ))}
         </ul>
+
+        <button
+          className="flex w-full items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-ink-muted hover:bg-slate-100"
+          onClick={() => setRoomOptsOpen((o) => !o)}
+        >
+          <span>Room options</span>
+          <span aria-hidden>{roomOptsOpen ? "▾" : "▸"}</span>
+        </button>
+        {roomOptsOpen && (
+          <div className="mt-2 space-y-3 rounded-md border border-slate-200 p-3">
+            <div>
+              <label className="label">Room size</label>
+              <div className="mt-1 grid grid-cols-2 gap-2">
+                <NumberField
+                  ariaLabel="Width"
+                  value={room.width}
+                  min={400}
+                  max={3000}
+                  step={50}
+                  onChange={(v) => onUpdateRoom({ width: v })}
+                />
+                <NumberField
+                  ariaLabel="Height"
+                  value={room.height}
+                  min={400}
+                  max={3000}
+                  step={50}
+                  onChange={(v) => onUpdateRoom({ height: v })}
+                />
+              </div>
+              <p className="mt-1 text-[10px] text-ink-muted">Width × height of the room area.</p>
+            </div>
+            <div>
+              <label className="label">Front of room</label>
+              <div className="mt-1 grid grid-cols-2 gap-1">
+                {(["top", "right", "bottom", "left"] as Wall[]).map((wall) => (
+                  <button
+                    key={wall}
+                    className={cn(
+                      "rounded-md border px-2 py-1 text-xs capitalize",
+                      room.frontWall === wall
+                        ? "border-ink bg-ink text-white"
+                        : "border-slate-300 bg-white text-ink hover:bg-slate-50",
+                    )}
+                    onClick={() => onUpdateRoom({ frontWall: wall })}
+                  >
+                    {wall}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
-      <div className="space-y-1 border-t border-slate-200 p-3 text-xs text-ink-muted">
-        <div>Single-student desks drop directly. Multi-student tables ask for parameters first.</div>
-        <div>Drag to reposition; rotate via the handle. Right-click a desk to mark its seats as front-row.</div>
-        <div>
-          <kbd className="rounded border border-slate-300 bg-slate-50 px-1">Del</kbd> remove ·{" "}
-          <kbd className="rounded border border-slate-300 bg-slate-50 px-1">Ctrl C</kbd>/
-          <kbd className="rounded border border-slate-300 bg-slate-50 px-1">V</kbd> copy/paste ·{" "}
-          <kbd className="rounded border border-slate-300 bg-slate-50 px-1">Ctrl D</kbd> duplicate
-        </div>
+      <div className="space-y-2 border-t border-slate-200 p-3">
+        <button className="btn-primary w-full" onClick={onRandomize}>Randomize seating</button>
+        <button className="btn-secondary w-full" onClick={onSave}>Save this arrangement</button>
+        <button className="btn-secondary w-full" onClick={onExportJpg}>Export JPG</button>
       </div>
     </aside>
+  );
+}
+
+function NumberField({
+  ariaLabel,
+  value,
+  min,
+  max,
+  step,
+  onChange,
+}: {
+  ariaLabel: string;
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <input
+      type="number"
+      className="input"
+      aria-label={ariaLabel}
+      value={value}
+      min={min}
+      max={max}
+      step={step ?? 1}
+      onChange={(e) => {
+        const next = Math.max(min, Math.min(max, Number(e.target.value) || min));
+        onChange(next);
+      }}
+    />
   );
 }
 

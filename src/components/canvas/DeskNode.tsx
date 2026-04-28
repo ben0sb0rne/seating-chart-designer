@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
-import { Group, Rect, Circle, RegularPolygon, Text, Transformer } from "react-konva";
+import { Group, Rect, Circle, Line, Text, Transformer } from "react-konva";
 import type Konva from "konva";
 import type { Desk, SeatId, Student, StudentId, ClassId } from "@/types";
 import { useAppStore } from "@/store/appStore";
+import { shouldKeepRatio } from "@/lib/shapes";
 
 interface Props {
   desk: Desk;
@@ -15,6 +16,17 @@ interface Props {
   onDragEnd: () => void;
   classId: ClassId;
 }
+
+const NAME_FONT_SIZE = 13;
+const NAME_BOX_WIDTH = 88;
+const SEAT_DOT_RADIUS = 8;
+const STROKE = "#334155";
+const STROKE_SELECTED = "#0284c7";
+const FILL = "#f8fafc";
+const FILL_SELECTED = "#e0f2fe";
+const STROKE_WIDTH = 2;
+const STROKE_WIDTH_SELECTED = 3;
+const MIN_DESK_DIM = 40;
 
 export default function DeskNode({
   desk,
@@ -42,9 +54,10 @@ export default function DeskNode({
   }, [selected]);
 
   const allFront = desk.seats.length > 0 && desk.seats.every((s) => s.isFrontRow);
-  const fill = selected ? "#e0f2fe" : "#f1f5f9";
-  const stroke = selected ? "#0284c7" : "#475569";
-  const strokeWidth = selected ? 2 : 1;
+  const fill = selected ? FILL_SELECTED : FILL;
+  const stroke = selected ? STROKE_SELECTED : STROKE;
+  const strokeWidth = selected ? STROKE_WIDTH_SELECTED : STROKE_WIDTH;
+  const keepRatio = shouldKeepRatio(desk.kind);
 
   return (
     <>
@@ -80,7 +93,26 @@ export default function DeskNode({
         onTransformEnd={() => {
           const node = groupRef.current;
           if (!node) return;
-          updateDesk(classId, desk.id, { x: node.x(), y: node.y(), rotation: node.rotation() });
+          const sx = node.scaleX();
+          const sy = node.scaleY();
+          const newWidth = Math.max(MIN_DESK_DIM, desk.width * sx);
+          const newHeight = Math.max(MIN_DESK_DIM, desk.height * sy);
+          const seats = desk.seats.map((seat) => ({
+            ...seat,
+            offsetX: seat.offsetX * sx,
+            offsetY: seat.offsetY * sy,
+          }));
+          // Reset scale on the node so future transforms compose cleanly.
+          node.scaleX(1);
+          node.scaleY(1);
+          updateDesk(classId, desk.id, {
+            x: node.x(),
+            y: node.y(),
+            rotation: node.rotation(),
+            width: newWidth,
+            height: newHeight,
+            seats,
+          });
         }}
       >
         <DeskShapeRenderer desk={desk} fill={fill} stroke={stroke} strokeWidth={strokeWidth} />
@@ -114,21 +146,33 @@ export default function DeskNode({
                 setSeatFrontRow(classId, desk.id, seat.id, !seat.isFrontRow);
               }}
             >
-              <Circle
-                radius={14}
-                fill={seat.isFrontRow ? "#fde68a" : "#ffffff"}
-                stroke={seat.isFrontRow ? "#b45309" : "#94a3b8"}
-                strokeWidth={seat.isFrontRow ? 2 : 1}
-              />
-              {student && (
+              {seat.isFrontRow && (
+                <Circle
+                  radius={NAME_BOX_WIDTH / 2.4}
+                  fill="#fde68a"
+                  stroke="#b45309"
+                  strokeWidth={1}
+                  opacity={0.55}
+                />
+              )}
+              {!student ? (
+                <Circle
+                  radius={SEAT_DOT_RADIUS}
+                  fill="#ffffff"
+                  stroke={seat.isFrontRow ? "#b45309" : "#94a3b8"}
+                  strokeWidth={1.5}
+                />
+              ) : (
                 <Text
                   text={student.name}
-                  fontSize={9}
+                  fontSize={NAME_FONT_SIZE}
+                  fontStyle="bold"
                   fill="#0f172a"
-                  width={80}
+                  width={NAME_BOX_WIDTH}
                   align="center"
-                  offsetX={40}
-                  offsetY={-16}
+                  offsetX={NAME_BOX_WIDTH / 2}
+                  offsetY={NAME_FONT_SIZE / 2}
+                  listening
                 />
               )}
             </Group>
@@ -140,10 +184,20 @@ export default function DeskNode({
         <Transformer
           ref={transformerRef}
           rotateEnabled
-          resizeEnabled={false}
-          borderStroke="#0284c7"
-          anchorStroke="#0284c7"
+          resizeEnabled
+          keepRatio={keepRatio}
+          enabledAnchors={
+            keepRatio
+              ? ["top-left", "top-right", "bottom-left", "bottom-right"]
+              : undefined
+          }
+          rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+          rotationSnapTolerance={5}
+          borderStroke={STROKE_SELECTED}
+          anchorStroke={STROKE_SELECTED}
           anchorFill="#ffffff"
+          anchorStrokeWidth={2}
+          anchorSize={10}
         />
       )}
     </>
@@ -174,7 +228,7 @@ function DeskShapeRenderer({
           fill={fill}
           stroke={stroke}
           strokeWidth={strokeWidth}
-          cornerRadius={4}
+          cornerRadius={6}
         />
       );
     case "single-circle":
@@ -189,22 +243,19 @@ function DeskShapeRenderer({
           strokeWidth={strokeWidth}
         />
       );
-    case "single-triangle": {
-      // For an equilateral triangle with apex up: centroid sits at 2/3 down from the apex,
-      // and the circumradius equals that same distance. Konva's RegularPolygon is centered
-      // on its centroid and at rotation 0 has a vertex pointing up.
-      const r = (desk.height * 2) / 3;
+    case "single-triangle":
+      // Isoceles triangle that exactly fills the bounding box: apex at top-center,
+      // base spanning the full bottom edge. Slightly stretched vs. an equilateral
+      // triangle so the desk module matches the other singles.
       return (
-        <RegularPolygon
-          x={desk.width / 2}
-          y={r}
-          sides={3}
-          radius={r}
+        <Line
+          points={[desk.width / 2, 0, desk.width, desk.height, 0, desk.height]}
+          closed
           fill={fill}
           stroke={stroke}
           strokeWidth={strokeWidth}
+          lineJoin="round"
         />
       );
-    }
   }
 }

@@ -44,9 +44,13 @@ export interface Desk {
   seats: Seat[];
 }
 
+export type Wall = "top" | "right" | "bottom" | "left";
+
 export interface Room {
   width: number;
   height: number;
+  /** Which wall the teacher considers the "front" of the room. Defaults to "top". */
+  frontWall: Wall;
   desks: Desk[];
 }
 
@@ -65,7 +69,7 @@ export interface ClassRoom {
   arrangements: Arrangement[];
 }
 
-export const SCHEMA_VERSION = 2 as const;
+export const SCHEMA_VERSION = 3 as const;
 
 export interface AppState {
   classes: ClassRoom[];

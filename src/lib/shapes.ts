@@ -2,6 +2,9 @@ import type { Desk, DeskKind, Seat } from "@/types";
 
 const uid = () => crypto.randomUUID();
 
+/** The base "single desk" size. All other shape sizes derive from this. */
+export const MODULE = 80;
+
 export interface MultiRectParams {
   rows: number;
   cols: number;
@@ -49,15 +52,13 @@ export function makeDesk(kind: DeskKind, params: ShapeParams, x: number, y: numb
 export function layoutDesk(kind: DeskKind, params: ShapeParams): LaidOutShape {
   switch (kind) {
     case "single-rect":
-      return { width: 60, height: 50, seats: [seatAt(30, 25)] };
-    case "single-triangle": {
-      // Equilateral triangle, base 70, height ~60. Seat at centroid.
-      const w = 70;
-      const h = 60;
-      return { width: w, height: h, seats: [seatAt(w / 2, h * 2 / 3)] };
-    }
     case "single-circle":
-      return { width: 50, height: 50, seats: [seatAt(25, 25)] };
+      return { width: MODULE, height: MODULE, seats: [seatAt(MODULE / 2, MODULE / 2)] };
+    case "single-triangle": {
+      // Equilateral triangle inscribed in the bounding box, apex at top center,
+      // base flush with bottom edge. Seat at the centroid (2/3 down from apex).
+      return { width: MODULE, height: MODULE, seats: [seatAt(MODULE / 2, (MODULE * 2) / 3)] };
+    }
     case "multi-rect":
       return layoutMultiRect(params as MultiRectParams);
     case "multi-square":
@@ -71,18 +72,15 @@ function seatAt(x: number, y: number): Seat {
   return { id: uid(), offsetX: x, offsetY: y, isFrontRow: false };
 }
 
-const CELL_W = 50;
-const CELL_H = 40;
-
 function layoutMultiRect({ rows, cols }: MultiRectParams): LaidOutShape {
   const r = clamp(rows, 1, 10);
   const c = clamp(cols, 1, 10);
-  const width = c * CELL_W;
-  const height = r * CELL_H;
+  const width = c * MODULE;
+  const height = r * MODULE;
   const seats: Seat[] = [];
   for (let row = 0; row < r; row++) {
     for (let col = 0; col < c; col++) {
-      seats.push(seatAt((col + 0.5) * CELL_W, (row + 0.5) * CELL_H));
+      seats.push(seatAt((col + 0.5) * MODULE, (row + 0.5) * MODULE));
     }
   }
   return { width, height, seats };
@@ -90,33 +88,25 @@ function layoutMultiRect({ rows, cols }: MultiRectParams): LaidOutShape {
 
 function layoutMultiSquare({ perSide }: MultiSquareParams): LaidOutShape {
   const n = clamp(perSide, 1, 6);
-  const side = Math.max(120, n * 36 + 24);
-  const inset = 14;
+  // (n + 1) intervals along each side gives each seat a full MODULE of edge.
+  const side = (n + 1) * MODULE;
+  const inset = MODULE / 4;
   const seats: Seat[] = [];
-  // For each side, place n seats evenly between corners (excluding corners).
-  // Top edge (y = inset), Right edge (x = side - inset), Bottom edge (y = side - inset), Left edge (x = inset).
-  for (let i = 1; i <= n; i++) {
-    const t = i / (n + 1); // fractional position along the edge
-    seats.push(seatAt(t * side, inset));            // top
-  }
-  for (let i = 1; i <= n; i++) {
-    const t = i / (n + 1);
-    seats.push(seatAt(side - inset, t * side));    // right
-  }
-  for (let i = 1; i <= n; i++) {
-    const t = i / (n + 1);
-    seats.push(seatAt((1 - t) * side, side - inset)); // bottom (reversed for clockwise order)
-  }
-  for (let i = 1; i <= n; i++) {
-    const t = i / (n + 1);
-    seats.push(seatAt(inset, (1 - t) * side));     // left
-  }
+  // Top edge
+  for (let i = 1; i <= n; i++) seats.push(seatAt((i / (n + 1)) * side, inset));
+  // Right edge
+  for (let i = 1; i <= n; i++) seats.push(seatAt(side - inset, (i / (n + 1)) * side));
+  // Bottom edge (right to left so order goes clockwise)
+  for (let i = 1; i <= n; i++) seats.push(seatAt((1 - i / (n + 1)) * side, side - inset));
+  // Left edge (bottom to top)
+  for (let i = 1; i <= n; i++) seats.push(seatAt(inset, (1 - i / (n + 1)) * side));
   return { width: side, height: side, seats };
 }
 
 function layoutMultiCircle({ seatCount }: MultiCircleParams): LaidOutShape {
   const n = clamp(seatCount, 3, 20);
-  const diameter = Math.max(120, n * 22 + 40);
+  // Circumference per seat ~= MODULE; diameter follows from there.
+  const diameter = Math.max(MODULE * 2, Math.ceil((n * MODULE) / Math.PI / 10) * 10);
   const cx = diameter / 2;
   const cy = diameter / 2;
   const r = diameter * 0.42;
@@ -164,4 +154,14 @@ export function cloneDeskWithFreshIds(desk: Desk, offsetX: number, offsetY: numb
     y: desk.y + offsetY,
     seats: desk.seats.map((seat) => ({ ...seat, id: uid() })),
   };
+}
+
+/** Whether resize should constrain proportionally. True for symmetric shapes. */
+export function shouldKeepRatio(kind: DeskKind): boolean {
+  return (
+    kind === "single-circle" ||
+    kind === "single-triangle" ||
+    kind === "multi-square" ||
+    kind === "multi-circle"
+  );
 }

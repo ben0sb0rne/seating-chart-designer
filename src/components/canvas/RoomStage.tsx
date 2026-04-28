@@ -1,10 +1,36 @@
 import { forwardRef, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
 import { Stage, Layer, Rect, Line } from "react-konva";
 import type Konva from "konva";
-import type { ClassId, Room, SeatId, Student, StudentId } from "@/types";
+import type { ClassId, Room, SeatId, Student, StudentId, Wall } from "@/types";
 import DeskNode from "./DeskNode";
 import SeatPicker from "./SeatPicker";
 import { snapDeskPosition, type Guide } from "@/lib/snap";
+
+function frontWallLine(wall: Wall, w: number, h: number): number[] {
+  switch (wall) {
+    case "top": return [0, 0, w, 0];
+    case "right": return [w, 0, w, h];
+    case "bottom": return [0, h, w, h];
+    case "left": return [0, 0, 0, h];
+  }
+}
+
+function FrontOfRoomLabel({ frontWall }: { frontWall: Wall }) {
+  const arrow = { top: "↑", right: "→", bottom: "↓", left: "←" }[frontWall];
+  const positionClass = {
+    top: "top-2 left-1/2 -translate-x-1/2",
+    right: "right-2 top-1/2 -translate-y-1/2",
+    bottom: "bottom-2 left-1/2 -translate-x-1/2",
+    left: "left-2 top-1/2 -translate-y-1/2",
+  }[frontWall];
+  return (
+    <div
+      className={`pointer-events-none absolute ${positionClass} rounded bg-ink/80 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm`}
+    >
+      {arrow} Front of room
+    </div>
+  );
+}
 
 interface Props {
   room: Room;
@@ -88,10 +114,10 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
           />
 
           <Line
-            points={[0, 0, room.width, 0]}
+            points={frontWallLine(room.frontWall ?? "top", room.width, room.height)}
             stroke="#0f172a"
-            strokeWidth={4 / safeScale}
-            dash={[10 / safeScale, 6 / safeScale]}
+            strokeWidth={5 / safeScale}
+            dash={[12 / safeScale, 8 / safeScale]}
           />
 
           {room.desks.map((desk) => (
@@ -141,9 +167,7 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
           )}
         </Layer>
       </Stage>
-      <div className="pointer-events-none absolute left-1/2 top-2 -translate-x-1/2 rounded bg-ink/80 px-2 py-1 text-[10px] font-medium uppercase tracking-wide text-white">
-        ↑ Front of room
-      </div>
+      <FrontOfRoomLabel frontWall={room.frontWall ?? "top"} />
       {picker && (
         <SeatPicker
           x={picker.x}
