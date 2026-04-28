@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { ClassRoom, SeatId, StudentId } from "@/types";
 import { roomSeats } from "@/lib/adjacency";
+import Icon from "@/components/Icon";
 
 interface Props {
   klass: ClassRoom;
@@ -37,11 +38,11 @@ export default function AssignmentPanel({ klass, assignments, onAssignSeat }: Pr
                   </span>
                   {student && (
                     <button
-                      className="text-xs text-red-600 hover:underline"
+                      className="rounded p-0.5 text-ink-muted hover:bg-red-50 hover:text-red-600"
                       onClick={() => onAssignSeat(s.seatId, null)}
-                      title="Clear"
+                      title="Clear assignment"
                     >
-                      ×
+                      <Icon name="x" size={12} />
                     </button>
                   )}
                 </li>

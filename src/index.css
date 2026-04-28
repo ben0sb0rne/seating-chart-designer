@@ -4,16 +4,21 @@
 
 @layer base {
   html, body, #root { height: 100%; }
-  body { font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    color: #1a1a1a;
+    background: #f5f5f5;
+  }
+  button, input, select, textarea, optgroup { font-family: inherit; }
   button { -webkit-tap-highlight-color: transparent; }
 }
 
 @layer components {
-  .btn { @apply inline-flex items-center justify-center rounded-md px-3 py-2 text-sm font-medium transition select-none; }
-  .btn-primary { @apply btn bg-ink text-white hover:bg-slate-800 disabled:opacity-50; }
-  .btn-secondary { @apply btn bg-white text-ink border border-slate-300 hover:bg-slate-50 disabled:opacity-50; }
+  .btn { @apply inline-flex items-center justify-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition select-none; }
+  .btn-primary { @apply btn bg-primary text-white hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed; }
+  .btn-secondary { @apply btn bg-white text-ink border border-slate-300 hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed; }
   .btn-danger { @apply btn bg-red-600 text-white hover:bg-red-700; }
-  .input { @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ink/20; }
-  .label { @apply block text-xs font-medium uppercase tracking-wide text-ink-muted; }
-  .card { @apply rounded-lg border border-slate-200 bg-white shadow-sm; }
+  .input { @apply w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30; }
+  .label { @apply block text-xs font-semibold uppercase tracking-wide text-ink-muted; }
+  .card { @apply rounded-md border border-slate-200 bg-white shadow-sm; }
 }

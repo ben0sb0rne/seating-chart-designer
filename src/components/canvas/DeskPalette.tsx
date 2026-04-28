@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { DeskKind, Room, Wall } from "@/types";
 import { cn } from "@/lib/cn";
+import Icon from "@/components/Icon";
 
 interface Props {
   onPlaceSingle: (kind: DeskKind) => void;
@@ -76,7 +77,7 @@ export default function DeskPalette({
               >
                 <ShapeIcon kind={it.kind} />
                 <span className="ml-2 flex-1 truncate text-left">{it.label}</span>
-                <span className="ml-1 text-xs text-ink-muted">…</span>
+                <Icon name="chevron-right" size={12} className="ml-1 text-ink-muted" />
               </button>
             </li>
           ))}
@@ -95,8 +96,8 @@ export default function DeskPalette({
             disabled={!canAlign}
             title="Align selected desks to the same X (line them up vertically)"
           >
-            <AlignIcon orientation="vertical" />
-            <span className="ml-1.5 text-xs">Vertical</span>
+            <Icon name="align-vertical" size={14} />
+            <span className="text-xs">Vertical</span>
           </button>
           <button
             className="btn-secondary justify-center"
@@ -104,17 +105,17 @@ export default function DeskPalette({
             disabled={!canAlign}
             title="Align selected desks to the same Y (line them up horizontally)"
           >
-            <AlignIcon orientation="horizontal" />
-            <span className="ml-1.5 text-xs">Horizontal</span>
+            <Icon name="align-horizontal" size={14} />
+            <span className="text-xs">Horizontal</span>
           </button>
         </div>
 
         <button
-          className="flex w-full items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium uppercase tracking-wide text-ink-muted hover:bg-slate-100"
+          className="flex w-full items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-ink-muted hover:bg-slate-100"
           onClick={() => setRoomOptsOpen((o) => !o)}
         >
           <span>Room options</span>
-          <span aria-hidden>{roomOptsOpen ? "▾" : "▸"}</span>
+          <Icon name={roomOptsOpen ? "chevron-down" : "chevron-right"} size={14} />
         </button>
         {roomOptsOpen && (
           <div className="mt-2 space-y-3 rounded-md border border-slate-200 p-3">
@@ -163,9 +164,18 @@ export default function DeskPalette({
         )}
       </div>
       <div className="space-y-2 border-t border-slate-200 p-3">
-        <button className="btn-primary w-full" onClick={onRandomize}>Randomize seating</button>
-        <button className="btn-secondary w-full" onClick={onSave}>Save this arrangement</button>
-        <button className="btn-secondary w-full" onClick={onExportJpg}>Export JPG</button>
+        <button className="btn-primary w-full" onClick={onRandomize}>
+          <Icon name="shuffle" size={14} />
+          Randomize seating
+        </button>
+        <button className="btn-secondary w-full" onClick={onSave}>
+          <Icon name="save" size={14} />
+          Save this arrangement
+        </button>
+        <button className="btn-secondary w-full" onClick={onExportJpg}>
+          <Icon name="image" size={14} />
+          Export JPG
+        </button>
       </div>
     </aside>
   );
@@ -203,47 +213,28 @@ function NumberField({
   );
 }
 
-function AlignIcon({ orientation }: { orientation: "vertical" | "horizontal" }) {
-  const stroke = "#475569";
-  if (orientation === "vertical") {
-    // Three small rects stacked, all left-aligned (same X)
-    return (
-      <svg width={16} height={16} viewBox="0 0 20 20" aria-hidden>
-        <line x1="3" y1="2" x2="3" y2="18" stroke={stroke} strokeWidth="1.5" strokeDasharray="2 2" />
-        <rect x="3" y="3" width="11" height="3" fill="#e2e8f0" stroke={stroke} />
-        <rect x="3" y="8.5" width="14" height="3" fill="#e2e8f0" stroke={stroke} />
-        <rect x="3" y="14" width="9" height="3" fill="#e2e8f0" stroke={stroke} />
-      </svg>
-    );
-  }
-  // horizontal: three small rects in a row, all top-aligned (same Y)
-  return (
-    <svg width={16} height={16} viewBox="0 0 20 20" aria-hidden>
-      <line x1="2" y1="3" x2="18" y2="3" stroke={stroke} strokeWidth="1.5" strokeDasharray="2 2" />
-      <rect x="3" y="3" width="3" height="11" fill="#e2e8f0" stroke={stroke} />
-      <rect x="8.5" y="3" width="3" height="14" fill="#e2e8f0" stroke={stroke} />
-      <rect x="14" y="3" width="3" height="9" fill="#e2e8f0" stroke={stroke} />
-    </svg>
-  );
-}
-
 function ShapeIcon({ kind }: { kind: DeskKind }) {
   const stroke = "#475569";
   const fill = "#e2e8f0";
   const size = 18;
   switch (kind) {
     case "single-rect":
-      // Landscape 4:3 rectangle
+      // Landscape 100:60 rectangle
       return (
         <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
-          <rect x="2" y="6" width="16" height="8" fill={fill} stroke={stroke} rx="1" />
+          <rect x="1" y="6" width="18" height="8" fill={fill} stroke={stroke} rx="1.5" />
         </svg>
       );
     case "single-triangle":
-      // Squashed isoceles triangle (wider than tall)
+      // Squashed isoceles triangle with rounded corners
       return (
-        <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
-          <polygon points="10,6 18,14 2,14" fill={fill} stroke={stroke} strokeLinejoin="round" />
+        <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden strokeLinejoin="round" strokeLinecap="round">
+          <path
+            d="M 10 6 Q 10 6 11 6.5 L 18 13 Q 18.5 14 17.5 14.5 L 2.5 14.5 Q 1.5 14 2 13 L 9 6.5 Q 10 6 10 6 Z"
+            fill={fill}
+            stroke={stroke}
+            strokeWidth="1.2"
+          />
         </svg>
       );
     case "multi-rect":

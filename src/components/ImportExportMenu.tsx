@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import { useAppStore } from "@/store/appStore";
 import { exportStateToFile, readStateFromFile } from "@/lib/io";
+import Icon from "@/components/Icon";
 
 export default function ImportExportMenu() {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -46,8 +47,14 @@ export default function ImportExportMenu() {
         className="hidden"
         onChange={handleImport}
       />
-      <button className="btn-secondary" onClick={() => fileRef.current?.click()}>Import</button>
-      <button className="btn-secondary" onClick={exportNow}>Export</button>
+      <button className="btn-secondary" onClick={() => fileRef.current?.click()}>
+        <Icon name="upload" size={14} />
+        Import
+      </button>
+      <button className="btn-secondary" onClick={exportNow}>
+        <Icon name="download" size={14} />
+        Export
+      </button>
     </div>
   );
 }

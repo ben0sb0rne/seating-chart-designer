@@ -5,6 +5,7 @@ import type { ClassId, Room, SeatId, Student, StudentId, Wall } from "@/types";
 import DeskNode from "./DeskNode";
 import SeatPicker from "./SeatPicker";
 import { snapDeskPosition, type Guide } from "@/lib/snap";
+import Icon, { type IconName } from "@/components/Icon";
 
 function frontWallLine(wall: Wall, w: number, h: number): number[] {
   switch (wall) {
@@ -16,7 +17,12 @@ function frontWallLine(wall: Wall, w: number, h: number): number[] {
 }
 
 function FrontOfRoomLabel({ frontWall }: { frontWall: Wall }) {
-  const arrow = { top: "↑", right: "→", bottom: "↓", left: "←" }[frontWall];
+  const arrowIcon: IconName = ({
+    top: "arrow-up",
+    right: "arrow-right",
+    bottom: "arrow-down",
+    left: "arrow-left",
+  } as const)[frontWall];
   const positionClass = {
     top: "top-2 left-1/2 -translate-x-1/2",
     right: "right-2 top-1/2 -translate-y-1/2",
@@ -25,9 +31,10 @@ function FrontOfRoomLabel({ frontWall }: { frontWall: Wall }) {
   }[frontWall];
   return (
     <div
-      className={`pointer-events-none absolute ${positionClass} rounded bg-ink/80 px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm`}
+      className={`pointer-events-none absolute ${positionClass} flex items-center gap-1.5 rounded bg-ink/85 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide text-white shadow-sm`}
     >
-      {arrow} Front of room
+      <Icon name={arrowIcon} size={12} />
+      <span>Front of room</span>
     </div>
   );
 }

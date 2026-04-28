@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { Group, Rect, Circle, Line, Text, Transformer } from "react-konva";
+import { Group, Rect, Circle, Shape, Text, Transformer } from "react-konva";
 import type Konva from "konva";
 import type { Desk, SeatId, Student, StudentId, ClassId } from "@/types";
 import { useAppStore } from "@/store/appStore";
@@ -242,19 +242,38 @@ function DeskShapeRenderer({
           strokeWidth={strokeWidth}
         />
       );
-    case "single-triangle":
-      // Isoceles triangle that exactly fills the bounding box: apex at top-center,
-      // base spanning the full bottom edge. Slightly stretched vs. an equilateral
-      // triangle so the desk module matches the other singles.
+    case "single-triangle": {
+      // Isoceles triangle with rounded corners — apex at top-center, base flush
+      // with the bottom edge. Drawn via a custom sceneFunc that uses canvas
+      // arcTo() to round each vertex.
+      const w = desk.width;
+      const h = desk.height;
+      const cornerR = Math.min(8, Math.min(w, h) / 8);
       return (
-        <Line
-          points={[desk.width / 2, 0, desk.width, desk.height, 0, desk.height]}
-          closed
+        <Shape
           fill={fill}
           stroke={stroke}
           strokeWidth={strokeWidth}
-          lineJoin="round"
+          sceneFunc={(ctx, shape) => {
+            const apex = { x: w / 2, y: 0 };
+            const right = { x: w, y: h };
+            const left = { x: 0, y: h };
+            // Start somewhere along the apex->right edge, just past the rounded apex.
+            const dx = right.x - apex.x;
+            const dy = right.y - apex.y;
+            const len = Math.hypot(dx, dy);
+            const startX = apex.x + (dx / len) * cornerR;
+            const startY = apex.y + (dy / len) * cornerR;
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            ctx.arcTo(right.x, right.y, left.x, left.y, cornerR);
+            ctx.arcTo(left.x, left.y, apex.x, apex.y, cornerR);
+            ctx.arcTo(apex.x, apex.y, right.x, right.y, cornerR);
+            ctx.closePath();
+            ctx.fillStrokeShape(shape);
+          }}
         />
       );
+    }
   }
 }

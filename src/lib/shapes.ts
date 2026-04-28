@@ -2,11 +2,11 @@ import type { Desk, DeskKind, Seat } from "@/types";
 
 const uid = () => crypto.randomUUID();
 
-/** The base "single desk" module width. All other shape sizes derive from this. */
+/** The base "single desk" module width. Multi-shape sizes derive from this. */
 export const MODULE = 80;
-/** Single desks are landscape rectangles: width MODULE, height MODULE * 3/4. */
-export const SINGLE_W = MODULE;
-export const SINGLE_H = (MODULE * 3) / 4;
+/** Single desks are landscape rectangles: 100 wide x 60 tall. */
+export const SINGLE_W = 100;
+export const SINGLE_H = 60;
 
 export interface MultiRectParams {
   rows: number;
