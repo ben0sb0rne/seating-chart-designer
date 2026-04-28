@@ -2,6 +2,7 @@ import { useState } from "react";
 import * as Popover from "@radix-ui/react-popover";
 import type { Student } from "@/types";
 import { useAppStore } from "@/store/appStore";
+import Icon from "@/components/Icon";
 
 interface Props {
   classId: string;
@@ -15,19 +16,25 @@ export default function KeepApartEditor({ classId, student, students }: Props) {
 
   const others = students.filter((s) => s.id !== student.id);
   const filtered = others.filter((s) => s.name.toLowerCase().includes(filter.toLowerCase()));
-
-  const labels = student.keepApart
-    .map((id) => students.find((s) => s.id === id)?.name)
-    .filter(Boolean) as string[];
+  const count = student.keepApart.length;
 
   return (
     <Popover.Root>
       <Popover.Trigger asChild>
-        <button className="btn-secondary text-left max-w-full">
-          {labels.length === 0 ? (
-            <span className="text-ink-muted">Add…</span>
-          ) : (
-            <span className="line-clamp-1">{labels.join(", ")}</span>
+        <button
+          className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-2 py-1.5 text-xs font-medium hover:bg-slate-50"
+          title={
+            count === 0
+              ? "Pick students to keep apart from"
+              : `Kept apart from ${count} student${count === 1 ? "" : "s"}`
+          }
+        >
+          <Icon name="edit" size={12} />
+          <span>Edit</span>
+          {count > 0 && (
+            <span className="ml-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-primary px-1 text-[10px] font-semibold text-white">
+              {count}
+            </span>
           )}
         </button>
       </Popover.Trigger>
@@ -36,6 +43,9 @@ export default function KeepApartEditor({ classId, student, students }: Props) {
           align="start"
           className="z-50 w-72 rounded-md border border-slate-200 bg-white p-2 shadow-lg"
         >
+          <div className="mb-2 px-1 text-xs font-semibold text-ink">
+            Keep <span className="text-primary">{student.name}</span> apart from…
+          </div>
           <input
             className="input mb-2"
             placeholder="Filter…"

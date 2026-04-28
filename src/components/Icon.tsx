@@ -115,21 +115,49 @@ const PATHS: Record<string, ReactNode> = {
     </>
   ),
   "align-vertical": (
-    // Three rectangles, all left-aligned to a vertical guide
+    // Items in a column with their LEFT edges aligned to a vertical guideline.
     <>
-      <line x1="4" y1="2" x2="4" y2="22" strokeDasharray="2 2" />
-      <rect x="4" y="3" width="14" height="4" />
-      <rect x="4" y="10" width="10" height="4" />
-      <rect x="4" y="17" width="16" height="4" />
+      <line x1="3" y1="2" x2="3" y2="22" />
+      <rect x="5" y="4" width="14" height="3" rx="0.5" />
+      <rect x="5" y="10.5" width="9" height="3" rx="0.5" />
+      <rect x="5" y="17" width="16" height="3" rx="0.5" />
     </>
   ),
   "align-horizontal": (
-    // Three rectangles, all top-aligned to a horizontal guide
+    // Items in a row with their TOP edges aligned to a horizontal guideline.
     <>
-      <line x1="2" y1="4" x2="22" y2="4" strokeDasharray="2 2" />
-      <rect x="3" y="4" width="4" height="14" />
-      <rect x="10" y="4" width="4" height="10" />
-      <rect x="17" y="4" width="4" height="16" />
+      <line x1="2" y1="3" x2="22" y2="3" />
+      <rect x="4" y="5" width="3" height="14" rx="0.5" />
+      <rect x="10.5" y="5" width="3" height="9" rx="0.5" />
+      <rect x="17" y="5" width="3" height="16" rx="0.5" />
+    </>
+  ),
+  "distribute-vertical": (
+    // Three stacked rectangles spread evenly down. Tick marks on the side
+    // indicate equal spacing between them.
+    <>
+      <rect x="6" y="3" width="12" height="3" rx="0.5" />
+      <rect x="6" y="10.5" width="12" height="3" rx="0.5" />
+      <rect x="6" y="18" width="12" height="3" rx="0.5" />
+      <line x1="3" y1="6.5" x2="3" y2="10" />
+      <line x1="3" y1="14" x2="3" y2="17.5" />
+    </>
+  ),
+  "distribute-horizontal": (
+    // Three rectangles in a row spread evenly across. Tick marks on top
+    // indicate equal spacing between them.
+    <>
+      <rect x="3" y="6" width="3" height="12" rx="0.5" />
+      <rect x="10.5" y="6" width="3" height="12" rx="0.5" />
+      <rect x="18" y="6" width="3" height="12" rx="0.5" />
+      <line x1="6.5" y1="3" x2="10" y2="3" />
+      <line x1="14" y1="3" x2="17.5" y2="3" />
+    </>
+  ),
+  "rotate-ccw": (
+    <>
+      <polyline points="1 4 1 10 7 10" />
+      <path d="M3.51 15a9 9 0 1 0 .49-3.51" />
     </>
   ),
 };

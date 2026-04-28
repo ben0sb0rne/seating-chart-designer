@@ -243,14 +243,18 @@ function DeskShapeRenderer({
         />
       );
     case "single-triangle": {
-      // Isoceles triangle with rounded corners — apex at top-center, base flush
-      // with the bottom edge. Drawn via a custom sceneFunc that uses canvas
-      // arcTo() to round each vertex.
+      // Isoceles triangle with subtly rounded corners. Apex at top-center, base
+      // along the bottom. Drawn via sceneFunc + arcTo so the corners are smooth.
+      // We pass width/height explicitly so Konva's getClientRect (and therefore
+      // the Transformer) reports the desk's logical bounding box, not just the
+      // arc-inset visible bounds.
       const w = desk.width;
       const h = desk.height;
-      const cornerR = Math.min(8, Math.min(w, h) / 8);
+      const cornerR = 4;
       return (
         <Shape
+          width={w}
+          height={h}
           fill={fill}
           stroke={stroke}
           strokeWidth={strokeWidth}
@@ -258,7 +262,6 @@ function DeskShapeRenderer({
             const apex = { x: w / 2, y: 0 };
             const right = { x: w, y: h };
             const left = { x: 0, y: h };
-            // Start somewhere along the apex->right edge, just past the rounded apex.
             const dx = right.x - apex.x;
             const dy = right.y - apex.y;
             const len = Math.hypot(dx, dy);

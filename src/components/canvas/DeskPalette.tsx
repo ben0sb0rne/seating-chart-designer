@@ -11,9 +11,8 @@ interface Props {
   selectionSize: number;
   onAlignVertical: () => void;
   onAlignHorizontal: () => void;
-  onRandomize: () => void;
-  onSave: () => void;
-  onExportJpg: () => void;
+  onDistributeVertical: () => void;
+  onDistributeHorizontal: () => void;
 }
 
 interface PaletteItem {
@@ -32,6 +31,9 @@ const MULTI_ITEMS: PaletteItem[] = [
   { kind: "multi-circle", label: "Circle table" },
 ];
 
+const DEFAULT_ROOM_W = 1000;
+const DEFAULT_ROOM_H = 700;
+
 export default function DeskPalette({
   onPlaceSingle,
   onOpenMulti,
@@ -40,12 +42,13 @@ export default function DeskPalette({
   selectionSize,
   onAlignVertical,
   onAlignHorizontal,
-  onRandomize,
-  onSave,
-  onExportJpg,
+  onDistributeVertical,
+  onDistributeHorizontal,
 }: Props) {
   const [roomOptsOpen, setRoomOptsOpen] = useState(false);
   const canAlign = selectionSize >= 2;
+  const canDistribute = selectionSize >= 3;
+  const isDefaultRoom = room.width === DEFAULT_ROOM_W && room.height === DEFAULT_ROOM_H;
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-slate-200 bg-white">
@@ -84,12 +87,12 @@ export default function DeskPalette({
         </ul>
 
         <div className="mb-2 flex items-center justify-between">
-          <span className="label">Align selected</span>
+          <span className="label">Arrange selected</span>
           <span className="text-[10px] text-ink-muted">
             {selectionSize} desk{selectionSize === 1 ? "" : "s"}
           </span>
         </div>
-        <div className="mb-5 grid grid-cols-2 gap-1">
+        <div className="mb-2 grid grid-cols-2 gap-1">
           <button
             className="btn-secondary justify-center"
             onClick={onAlignVertical}
@@ -97,7 +100,7 @@ export default function DeskPalette({
             title="Align selected desks to the same X (line them up vertically)"
           >
             <Icon name="align-vertical" size={14} />
-            <span className="text-xs">Vertical</span>
+            <span className="text-xs">Align V</span>
           </button>
           <button
             className="btn-secondary justify-center"
@@ -106,9 +109,30 @@ export default function DeskPalette({
             title="Align selected desks to the same Y (line them up horizontally)"
           >
             <Icon name="align-horizontal" size={14} />
-            <span className="text-xs">Horizontal</span>
+            <span className="text-xs">Align H</span>
+          </button>
+          <button
+            className="btn-secondary justify-center"
+            onClick={onDistributeVertical}
+            disabled={!canDistribute}
+            title="Spread selected desks evenly between the topmost and bottommost"
+          >
+            <Icon name="distribute-vertical" size={14} />
+            <span className="text-xs">Dist V</span>
+          </button>
+          <button
+            className="btn-secondary justify-center"
+            onClick={onDistributeHorizontal}
+            disabled={!canDistribute}
+            title="Spread selected desks evenly between the leftmost and rightmost"
+          >
+            <Icon name="distribute-horizontal" size={14} />
+            <span className="text-xs">Dist H</span>
           </button>
         </div>
+        <p className="mb-5 text-[10px] text-ink-muted">
+          Distribute needs 3+ desks selected.
+        </p>
 
         <button
           className="flex w-full items-center justify-between rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-ink-muted hover:bg-slate-100"
@@ -120,8 +144,19 @@ export default function DeskPalette({
         {roomOptsOpen && (
           <div className="mt-2 space-y-3 rounded-md border border-slate-200 p-3">
             <div>
-              <label className="label">Room size</label>
-              <div className="mt-1 grid grid-cols-2 gap-2">
+              <div className="mb-1 flex items-center justify-between">
+                <label className="label">Room size</label>
+                <button
+                  className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-ink-muted hover:bg-slate-100 disabled:opacity-40"
+                  onClick={() => onUpdateRoom({ width: DEFAULT_ROOM_W, height: DEFAULT_ROOM_H })}
+                  disabled={isDefaultRoom}
+                  title="Reset room size to default"
+                >
+                  <Icon name="rotate-ccw" size={10} />
+                  Reset
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
                 <NumberField
                   ariaLabel="Width"
                   value={room.width}
@@ -143,41 +178,57 @@ export default function DeskPalette({
             </div>
             <div>
               <label className="label">Front of room</label>
-              <div className="mt-1 grid grid-cols-2 gap-1">
-                {(["top", "right", "bottom", "left"] as Wall[]).map((wall) => (
-                  <button
-                    key={wall}
-                    className={cn(
-                      "rounded-md border px-2 py-1 text-xs capitalize",
-                      room.frontWall === wall
-                        ? "border-ink bg-ink text-white"
-                        : "border-slate-300 bg-white text-ink hover:bg-slate-50",
-                    )}
-                    onClick={() => onUpdateRoom({ frontWall: wall })}
-                  >
-                    {wall}
-                  </button>
-                ))}
-              </div>
+              <FrontWallPicker
+                value={room.frontWall ?? "top"}
+                onChange={(wall) => onUpdateRoom({ frontWall: wall })}
+              />
             </div>
           </div>
         )}
       </div>
-      <div className="space-y-2 border-t border-slate-200 p-3">
-        <button className="btn-primary w-full" onClick={onRandomize}>
-          <Icon name="shuffle" size={14} />
-          Randomize seating
-        </button>
-        <button className="btn-secondary w-full" onClick={onSave}>
-          <Icon name="save" size={14} />
-          Save this arrangement
-        </button>
-        <button className="btn-secondary w-full" onClick={onExportJpg}>
-          <Icon name="image" size={14} />
-          Export JPG
-        </button>
-      </div>
     </aside>
+  );
+}
+
+/** Three-row layout matching the spatial arrangement: top centered, then left+right, then bottom. */
+function FrontWallPicker({ value, onChange }: { value: Wall; onChange: (w: Wall) => void }) {
+  return (
+    <div className="mt-1 grid grid-cols-3 gap-1">
+      <span />
+      <WallButton wall="top" current={value} onClick={onChange} />
+      <span />
+      <WallButton wall="left" current={value} onClick={onChange} />
+      <span />
+      <WallButton wall="right" current={value} onClick={onChange} />
+      <span />
+      <WallButton wall="bottom" current={value} onClick={onChange} />
+      <span />
+    </div>
+  );
+}
+
+function WallButton({
+  wall,
+  current,
+  onClick,
+}: {
+  wall: Wall;
+  current: Wall;
+  onClick: (w: Wall) => void;
+}) {
+  const active = wall === current;
+  return (
+    <button
+      className={cn(
+        "rounded-md border px-2 py-1 text-xs capitalize",
+        active
+          ? "border-ink bg-ink text-white"
+          : "border-slate-300 bg-white text-ink hover:bg-slate-50",
+      )}
+      onClick={() => onClick(wall)}
+    >
+      {wall}
+    </button>
   );
 }
 
@@ -219,14 +270,12 @@ function ShapeIcon({ kind }: { kind: DeskKind }) {
   const size = 18;
   switch (kind) {
     case "single-rect":
-      // Landscape 100:60 rectangle
       return (
         <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
           <rect x="1" y="6" width="18" height="8" fill={fill} stroke={stroke} rx="1.5" />
         </svg>
       );
     case "single-triangle":
-      // Squashed isoceles triangle with rounded corners
       return (
         <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden strokeLinejoin="round" strokeLinecap="round">
           <path

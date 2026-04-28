@@ -7,15 +7,40 @@ interface Props {
   klass: ClassRoom;
   assignments: Record<SeatId, StudentId>;
   onAssignSeat: (seatId: SeatId, studentId: StudentId | null) => void;
+  onRandomize: () => void;
+  onSave: () => void;
+  onExportJpg: () => void;
 }
 
-export default function AssignmentPanel({ klass, assignments, onAssignSeat }: Props) {
+export default function AssignmentPanel({
+  klass,
+  assignments,
+  onAssignSeat,
+  onRandomize,
+  onSave,
+  onExportJpg,
+}: Props) {
   const seats = useMemo(() => roomSeats(klass.room), [klass.room]);
   const seated = new Set(Object.values(assignments));
   const unseated = klass.students.filter((s) => !seated.has(s.id));
 
   return (
     <aside className="flex w-72 shrink-0 flex-col border-l border-slate-200 bg-white">
+      <div className="space-y-2 border-b border-slate-200 p-3">
+        <button className="btn-primary w-full" onClick={onRandomize}>
+          <Icon name="shuffle" size={14} />
+          Randomize seating
+        </button>
+        <button className="btn-secondary w-full" onClick={onSave}>
+          <Icon name="save" size={14} />
+          Save this arrangement
+        </button>
+        <button className="btn-secondary w-full" onClick={onExportJpg}>
+          <Icon name="image" size={14} />
+          Export JPG
+        </button>
+      </div>
+
       <div className="flex-1 overflow-auto p-3">
         <div className="mb-2 flex items-center justify-between">
           <span className="label">Assignments</span>

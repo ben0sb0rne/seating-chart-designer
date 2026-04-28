@@ -164,6 +164,36 @@ export default function RoomDesigner() {
     }
   }
 
+  function handleDistributeVertical() {
+    if (!klass || selectedDeskIds.length < 3) return;
+    const selected = klass.room.desks
+      .filter((d) => selectedDeskIds.includes(d.id))
+      .slice()
+      .sort((a, b) => a.y - b.y);
+    const minY = selected[0].y;
+    const maxY = selected[selected.length - 1].y;
+    const step = (maxY - minY) / (selected.length - 1);
+    selected.forEach((d, i) => {
+      const newY = Math.round(minY + i * step);
+      if (d.y !== newY) updateDesk(klass.id, d.id, { y: newY });
+    });
+  }
+
+  function handleDistributeHorizontal() {
+    if (!klass || selectedDeskIds.length < 3) return;
+    const selected = klass.room.desks
+      .filter((d) => selectedDeskIds.includes(d.id))
+      .slice()
+      .sort((a, b) => a.x - b.x);
+    const minX = selected[0].x;
+    const maxX = selected[selected.length - 1].x;
+    const step = (maxX - minX) / (selected.length - 1);
+    selected.forEach((d, i) => {
+      const newX = Math.round(minX + i * step);
+      if (d.x !== newX) updateDesk(klass.id, d.id, { x: newX });
+    });
+  }
+
   function handleAssignSeat(seatId: SeatId, studentId: StudentId | null) {
     setAssignments((prev) => {
       const next = { ...prev };
@@ -184,19 +214,10 @@ export default function RoomDesigner() {
         selectionSize={selectedDeskIds.length}
         onAlignVertical={handleAlignVertical}
         onAlignHorizontal={handleAlignHorizontal}
-        onRandomize={handleRandomize}
-        onSave={handleSaveArrangement}
-        onExportJpg={handleExportJpg}
+        onDistributeVertical={handleDistributeVertical}
+        onDistributeHorizontal={handleDistributeHorizontal}
       />
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-        {warning && (
-          <div className="border-b border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
-            <strong>Heads up:</strong> {warning}
-            <button className="ml-3 text-xs underline" onClick={() => setWarning(null)}>
-              Dismiss
-            </button>
-          </div>
-        )}
         <RoomStage
           ref={stageRef}
           room={klass.room}
@@ -207,11 +228,22 @@ export default function RoomDesigner() {
           onAssignSeat={handleAssignSeat}
           classId={klass.id}
         />
+        {warning && (
+          <div className="absolute inset-x-0 top-0 z-10 mx-auto mt-2 max-w-md rounded border border-amber-200 bg-amber-50/95 px-3 py-2 text-sm text-amber-900 shadow-md backdrop-blur">
+            <strong>Heads up:</strong> {warning}
+            <button className="ml-3 text-xs underline" onClick={() => setWarning(null)}>
+              Dismiss
+            </button>
+          </div>
+        )}
       </div>
       <AssignmentPanel
         klass={klass}
         assignments={assignments}
         onAssignSeat={handleAssignSeat}
+        onRandomize={handleRandomize}
+        onSave={handleSaveArrangement}
+        onExportJpg={handleExportJpg}
       />
       <MultiShapeParamsDialog
         open={paramsDialog.open}
