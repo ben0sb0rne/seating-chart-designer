@@ -1,0 +1,252 @@
+import { useEffect, useRef } from "react";
+import { Group, Rect, Circle, Line, Shape, Text, Transformer } from "react-konva";
+import type Konva from "konva";
+import type { ClassId, Furniture } from "@/types";
+import { FURNITURE_DEFAULTS, furnitureLabel } from "@/lib/furniture";
+import { useAppStore } from "@/store/appStore";
+
+interface Props {
+  furniture: Furniture;
+  selected: boolean;
+  onSelect: (additive: boolean) => void;
+  onDragMove: (id: string, x: number, y: number) => { x: number; y: number };
+  onDragEnd: () => void;
+  classId: ClassId;
+}
+
+const STROKE_SELECTED = "#0284c7";
+const MIN_DIM = 24;
+
+export default function FurnitureNode({
+  furniture,
+  selected,
+  onSelect,
+  onDragMove,
+  onDragEnd,
+  classId,
+}: Props) {
+  const groupRef = useRef<Konva.Group>(null);
+  const transformerRef = useRef<Konva.Transformer>(null);
+
+  const updateFurniture = useAppStore((s) => s.updateFurniture);
+
+  useEffect(() => {
+    if (selected && transformerRef.current && groupRef.current) {
+      transformerRef.current.nodes([groupRef.current]);
+      transformerRef.current.getLayer()?.batchDraw();
+    }
+  }, [selected]);
+
+  const def = FURNITURE_DEFAULTS[furniture.kind];
+  const stroke = selected ? STROKE_SELECTED : def.stroke;
+  const strokeWidth = selected ? 3 : 2;
+
+  return (
+    <>
+      <Group
+        ref={groupRef}
+        x={furniture.x}
+        y={furniture.y}
+        rotation={furniture.rotation}
+        draggable
+        onMouseDown={(e) => {
+          e.cancelBubble = true;
+          onSelect(e.evt.shiftKey);
+        }}
+        onTouchStart={(e) => {
+          e.cancelBubble = true;
+          onSelect(false);
+        }}
+        onDragMove={(e) => {
+          const node = e.target;
+          const snapped = onDragMove(furniture.id, node.x(), node.y());
+          node.x(snapped.x);
+          node.y(snapped.y);
+        }}
+        onDragEnd={(e) => {
+          updateFurniture(classId, furniture.id, { x: e.target.x(), y: e.target.y() });
+          onDragEnd();
+        }}
+        onTransformEnd={() => {
+          const node = groupRef.current;
+          if (!node) return;
+          const sx = node.scaleX();
+          const sy = node.scaleY();
+          const newWidth = Math.max(MIN_DIM, furniture.width * sx);
+          const newHeight = Math.max(MIN_DIM, furniture.height * sy);
+          node.scaleX(1);
+          node.scaleY(1);
+          updateFurniture(classId, furniture.id, {
+            x: node.x(),
+            y: node.y(),
+            rotation: node.rotation(),
+            width: newWidth,
+            height: newHeight,
+          });
+        }}
+      >
+        <FurnitureShape
+          furniture={furniture}
+          fill={def.fill}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+        />
+      </Group>
+
+      {selected && (
+        <Transformer
+          ref={transformerRef}
+          rotateEnabled
+          resizeEnabled
+          rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+          rotationSnapTolerance={5}
+          borderStroke={STROKE_SELECTED}
+          anchorStroke={STROKE_SELECTED}
+          anchorFill="#ffffff"
+          anchorStrokeWidth={2}
+          anchorSize={10}
+        />
+      )}
+    </>
+  );
+}
+
+function FurnitureShape({
+  furniture,
+  fill,
+  stroke,
+  strokeWidth,
+}: {
+  furniture: Furniture;
+  fill: string;
+  stroke: string;
+  strokeWidth: number;
+}) {
+  const w = furniture.width;
+  const h = furniture.height;
+  switch (furniture.kind) {
+    case "teacher-desk":
+      return (
+        <>
+          <Rect
+            x={0}
+            y={0}
+            width={w}
+            height={h}
+            fill={fill}
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+            cornerRadius={6}
+          />
+          <Text
+            text="TEACHER"
+            x={0}
+            y={h / 2 - 7}
+            width={w}
+            align="center"
+            fontSize={13}
+            fontStyle="bold"
+            fill="#3b2010"
+            listening={false}
+          />
+        </>
+      );
+    case "bookshelf":
+      return (
+        <>
+          <Rect
+            x={0}
+            y={0}
+            width={w}
+            height={h}
+            fill={fill}
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+            cornerRadius={2}
+          />
+          {/* Three shelves indicated by horizontal lines */}
+          <Line points={[0, h * 0.33, w, h * 0.33]} stroke={stroke} strokeWidth={1} listening={false} />
+          <Line points={[0, h * 0.66, w, h * 0.66]} stroke={stroke} strokeWidth={1} listening={false} />
+        </>
+      );
+    case "window":
+      return (
+        <>
+          <Rect
+            x={0}
+            y={0}
+            width={w}
+            height={h}
+            fill={fill}
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+          />
+          {/* Vertical mullion bisector */}
+          <Line points={[w / 2, 0, w / 2, h]} stroke={stroke} strokeWidth={1.5} listening={false} />
+        </>
+      );
+    case "whiteboard":
+      return (
+        <Rect
+          x={0}
+          y={0}
+          width={w}
+          height={h}
+          fill={fill}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+          cornerRadius={1}
+        />
+      );
+    case "door":
+      // Wall segment along the top edge + a quarter-circle sweep showing the
+      // door's swing path. The "wall" is just a thin line; the arc fills the
+      // bounding box from top-left.
+      return (
+        <>
+          <Line points={[0, 0, w, 0]} stroke={stroke} strokeWidth={3} listening={false} />
+          <Shape
+            width={w}
+            height={h}
+            stroke={stroke}
+            strokeWidth={strokeWidth}
+            fill="rgba(245,245,245,0.5)"
+            sceneFunc={(ctx, shape) => {
+              ctx.beginPath();
+              ctx.moveTo(0, 0);
+              ctx.lineTo(w, 0);
+              ctx.arc(0, 0, w, 0, Math.PI / 2);
+              ctx.closePath();
+              ctx.fillStrokeShape(shape);
+            }}
+          />
+          <Text
+            text="Door"
+            x={0}
+            y={h - 14}
+            width={w}
+            align="center"
+            fontSize={9}
+            fill="#475569"
+            listening={false}
+          />
+        </>
+      );
+    case "plant": {
+      const radius = Math.min(w, h) / 2;
+      return (
+        <Circle
+          x={w / 2}
+          y={h / 2}
+          radius={radius}
+          fill={fill}
+          stroke={stroke}
+          strokeWidth={strokeWidth}
+        />
+      );
+    }
+  }
+}
+
+/** Used by the palette to label a furniture kind (re-exported helper). */
+export { furnitureLabel };

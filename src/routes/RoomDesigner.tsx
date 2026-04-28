@@ -7,9 +7,10 @@ import DeskPalette from "@/components/canvas/DeskPalette";
 import AssignmentPanel from "@/components/canvas/AssignmentPanel";
 import MultiShapeParamsDialog from "@/components/designer/MultiShapeParamsDialog";
 import { cloneDeskWithFreshIds, defaultParamsFor, layoutDesk, makeDesk, type ShapeParams } from "@/lib/shapes";
+import { cloneFurnitureWithFreshId, makeFurniture } from "@/lib/furniture";
 import { assign } from "@/lib/assign";
-import { exportStageAsJpg } from "@/lib/exportJpg";
-import type { Desk, DeskId, DeskKind, SeatId, StudentId } from "@/types";
+import { exportStageAsPng } from "@/lib/exportPng";
+import type { Desk, DeskKind, Furniture, FurnitureKind, SeatId, StudentId } from "@/types";
 
 const PASTE_OFFSET = 20;
 
@@ -20,22 +21,29 @@ export default function RoomDesigner() {
   const addDesks = useAppStore((s) => s.addDesks);
   const updateDesk = useAppStore((s) => s.updateDesk);
   const removeDesks = useAppStore((s) => s.removeDesks);
+  const addFurniture = useAppStore((s) => s.addFurniture);
+  const addFurnitures = useAppStore((s) => s.addFurnitures);
+  const updateFurniture = useAppStore((s) => s.updateFurniture);
+  const removeFurniture = useAppStore((s) => s.removeFurniture);
   const updateRoom = useAppStore((s) => s.updateRoom);
   const saveArrangement = useAppStore((s) => s.saveArrangement);
 
   const stageRef = useRef<Konva.Stage>(null);
-  const [selectedDeskIds, setSelectedDeskIds] = useState<DeskId[]>([]);
+  const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
   const [assignments, setAssignments] = useState<Record<SeatId, StudentId>>({});
   const [paramsDialog, setParamsDialog] = useState<{ open: boolean; kind: DeskKind | null }>({
     open: false,
     kind: null,
   });
   const [warning, setWarning] = useState<string | null>(null);
-  /** Snapshot of desks copied via Ctrl+C; offset is applied at paste time. */
-  const [clipboard, setClipboard] = useState<Desk[]>([]);
+  /** Snapshot of items copied via Ctrl+C (desks AND furniture). */
+  const [clipboard, setClipboard] = useState<{ desks: Desk[]; furniture: Furniture[] }>({
+    desks: [],
+    furniture: [],
+  });
 
   useEffect(() => {
-    setSelectedDeskIds([]);
+    setSelectedItemIds([]);
     setWarning(null);
     if (!klass) {
       setAssignments({});
@@ -59,38 +67,60 @@ export default function RoomDesigner() {
       const target = e.target as HTMLElement | null;
       if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
       const mod = e.ctrlKey || e.metaKey;
+      if (!klass) return;
 
-      if ((e.key === "Backspace" || e.key === "Delete") && selectedDeskIds.length > 0 && klass) {
+      if ((e.key === "Backspace" || e.key === "Delete") && selectedItemIds.length > 0) {
         e.preventDefault();
-        removeDesks(klass.id, selectedDeskIds);
-        setSelectedDeskIds([]);
+        const deskIds = klass.room.desks.filter((d) => selectedItemIds.includes(d.id)).map((d) => d.id);
+        const furnIds = (klass.room.furniture ?? []).filter((f) => selectedItemIds.includes(f.id)).map((f) => f.id);
+        if (deskIds.length) removeDesks(klass.id, deskIds);
+        if (furnIds.length) removeFurniture(klass.id, furnIds);
+        setSelectedItemIds([]);
       } else if (e.key === "Escape") {
-        setSelectedDeskIds([]);
-      } else if (mod && e.key.toLowerCase() === "c" && klass && selectedDeskIds.length > 0) {
+        setSelectedItemIds([]);
+      } else if (mod && e.key.toLowerCase() === "c" && selectedItemIds.length > 0) {
         e.preventDefault();
-        const selected = klass.room.desks.filter((d) => selectedDeskIds.includes(d.id));
-        setClipboard(selected);
-      } else if (mod && e.key.toLowerCase() === "v" && klass && clipboard.length > 0) {
+        const desks = klass.room.desks.filter((d) => selectedItemIds.includes(d.id));
+        const furniture = (klass.room.furniture ?? []).filter((f) => selectedItemIds.includes(f.id));
+        setClipboard({ desks, furniture });
+      } else if (mod && e.key.toLowerCase() === "v" && (clipboard.desks.length || clipboard.furniture.length)) {
         e.preventDefault();
-        const cloned = clipboard.map((d) => cloneDeskWithFreshIds(d, PASTE_OFFSET, PASTE_OFFSET));
-        addDesks(klass.id, cloned);
-        setSelectedDeskIds(cloned.map((d) => d.id));
-        // Update the clipboard with the offset versions so subsequent pastes step further down/right.
-        setClipboard(cloned);
-      } else if (mod && e.key.toLowerCase() === "d" && klass && selectedDeskIds.length > 0) {
+        const newDesks = clipboard.desks.map((d) => cloneDeskWithFreshIds(d, PASTE_OFFSET, PASTE_OFFSET));
+        const newFurn = clipboard.furniture.map((f) => cloneFurnitureWithFreshId(f, PASTE_OFFSET, PASTE_OFFSET));
+        if (newDesks.length) addDesks(klass.id, newDesks);
+        if (newFurn.length) addFurnitures(klass.id, newFurn);
+        setSelectedItemIds([...newDesks.map((d) => d.id), ...newFurn.map((f) => f.id)]);
+        setClipboard({ desks: newDesks, furniture: newFurn });
+      } else if (mod && e.key.toLowerCase() === "d" && selectedItemIds.length > 0) {
         e.preventDefault();
-        const selected = klass.room.desks.filter((d) => selectedDeskIds.includes(d.id));
-        const cloned = selected.map((d) => cloneDeskWithFreshIds(d, PASTE_OFFSET, PASTE_OFFSET));
-        addDesks(klass.id, cloned);
-        setSelectedDeskIds(cloned.map((d) => d.id));
-      } else if (mod && e.key.toLowerCase() === "a" && klass) {
+        const desks = klass.room.desks
+          .filter((d) => selectedItemIds.includes(d.id))
+          .map((d) => cloneDeskWithFreshIds(d, PASTE_OFFSET, PASTE_OFFSET));
+        const furniture = (klass.room.furniture ?? [])
+          .filter((f) => selectedItemIds.includes(f.id))
+          .map((f) => cloneFurnitureWithFreshId(f, PASTE_OFFSET, PASTE_OFFSET));
+        if (desks.length) addDesks(klass.id, desks);
+        if (furniture.length) addFurnitures(klass.id, furniture);
+        setSelectedItemIds([...desks.map((d) => d.id), ...furniture.map((f) => f.id)]);
+      } else if (mod && e.key.toLowerCase() === "a") {
         e.preventDefault();
-        setSelectedDeskIds(klass.room.desks.map((d) => d.id));
+        setSelectedItemIds([
+          ...klass.room.desks.map((d) => d.id),
+          ...(klass.room.furniture ?? []).map((f) => f.id),
+        ]);
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [selectedDeskIds, klass, removeDesks, addDesks, clipboard]);
+  }, [
+    selectedItemIds,
+    klass,
+    removeDesks,
+    removeFurniture,
+    addDesks,
+    addFurnitures,
+    clipboard,
+  ]);
 
   if (!klass) return <div className="p-6 text-ink-muted">Class not found.</div>;
 
@@ -109,12 +139,79 @@ export default function RoomDesigner() {
   }
 
   function handleOpenMulti(kind: DeskKind) {
-    // The dialog itself uses its own defaults; the kind tells it which inputs to show.
     setParamsDialog({ open: true, kind });
   }
 
   function handleConfirmMulti(kind: DeskKind, params: ShapeParams) {
     placeDeskAtCenter(kind, params ?? defaultParamsFor(kind));
+  }
+
+  function handlePlaceFurniture(kind: FurnitureKind) {
+    if (!klass) return;
+    const item = makeFurniture(kind, 0, 0);
+    const cx = klass.room.width / 2 - item.width / 2;
+    const cy = klass.room.height / 2 - item.height / 2;
+    item.x = Math.round(cx / 10) * 10;
+    item.y = Math.round(cy / 10) * 10;
+    addFurniture(klass.id, item);
+  }
+
+  function handleAlignVertical() {
+    if (!klass || selectedItemIds.length < 2) return;
+    const items = collectSelectedItems(klass.room.desks, klass.room.furniture ?? [], selectedItemIds);
+    const targetX = Math.min(...items.map((it) => it.entity.x));
+    for (const it of items) {
+      if (it.entity.x !== targetX) {
+        if (it.kind === "desk") updateDesk(klass.id, it.entity.id, { x: targetX });
+        else updateFurniture(klass.id, it.entity.id, { x: targetX });
+      }
+    }
+  }
+
+  function handleAlignHorizontal() {
+    if (!klass || selectedItemIds.length < 2) return;
+    const items = collectSelectedItems(klass.room.desks, klass.room.furniture ?? [], selectedItemIds);
+    const targetY = Math.min(...items.map((it) => it.entity.y));
+    for (const it of items) {
+      if (it.entity.y !== targetY) {
+        if (it.kind === "desk") updateDesk(klass.id, it.entity.id, { y: targetY });
+        else updateFurniture(klass.id, it.entity.id, { y: targetY });
+      }
+    }
+  }
+
+  function handleDistributeVertical() {
+    if (!klass || selectedItemIds.length < 3) return;
+    const items = collectSelectedItems(klass.room.desks, klass.room.furniture ?? [], selectedItemIds)
+      .slice()
+      .sort((a, b) => a.entity.y - b.entity.y);
+    const minY = items[0].entity.y;
+    const maxY = items[items.length - 1].entity.y;
+    const step = (maxY - minY) / (items.length - 1);
+    items.forEach((it, i) => {
+      const newY = Math.round(minY + i * step);
+      if (it.entity.y !== newY) {
+        if (it.kind === "desk") updateDesk(klass.id, it.entity.id, { y: newY });
+        else updateFurniture(klass.id, it.entity.id, { y: newY });
+      }
+    });
+  }
+
+  function handleDistributeHorizontal() {
+    if (!klass || selectedItemIds.length < 3) return;
+    const items = collectSelectedItems(klass.room.desks, klass.room.furniture ?? [], selectedItemIds)
+      .slice()
+      .sort((a, b) => a.entity.x - b.entity.x);
+    const minX = items[0].entity.x;
+    const maxX = items[items.length - 1].entity.x;
+    const step = (maxX - minX) / (items.length - 1);
+    items.forEach((it, i) => {
+      const newX = Math.round(minX + i * step);
+      if (it.entity.x !== newX) {
+        if (it.kind === "desk") updateDesk(klass.id, it.entity.id, { x: newX });
+        else updateFurniture(klass.id, it.entity.id, { x: newX });
+      }
+    });
   }
 
   function handleRandomize() {
@@ -140,58 +237,10 @@ export default function RoomDesigner() {
     setWarning(null);
   }
 
-  function handleExportJpg() {
+  function handleExportImage() {
     if (!stageRef.current || !klass) return;
     const date = new Date().toISOString().slice(0, 10);
-    exportStageAsJpg(stageRef.current, `${klass.name.replace(/\s+/g, "_")}_${date}`);
-  }
-
-  function handleAlignVertical() {
-    if (!klass || selectedDeskIds.length < 2) return;
-    const selected = klass.room.desks.filter((d) => selectedDeskIds.includes(d.id));
-    const targetX = Math.min(...selected.map((d) => d.x));
-    for (const d of selected) {
-      if (d.x !== targetX) updateDesk(klass.id, d.id, { x: targetX });
-    }
-  }
-
-  function handleAlignHorizontal() {
-    if (!klass || selectedDeskIds.length < 2) return;
-    const selected = klass.room.desks.filter((d) => selectedDeskIds.includes(d.id));
-    const targetY = Math.min(...selected.map((d) => d.y));
-    for (const d of selected) {
-      if (d.y !== targetY) updateDesk(klass.id, d.id, { y: targetY });
-    }
-  }
-
-  function handleDistributeVertical() {
-    if (!klass || selectedDeskIds.length < 3) return;
-    const selected = klass.room.desks
-      .filter((d) => selectedDeskIds.includes(d.id))
-      .slice()
-      .sort((a, b) => a.y - b.y);
-    const minY = selected[0].y;
-    const maxY = selected[selected.length - 1].y;
-    const step = (maxY - minY) / (selected.length - 1);
-    selected.forEach((d, i) => {
-      const newY = Math.round(minY + i * step);
-      if (d.y !== newY) updateDesk(klass.id, d.id, { y: newY });
-    });
-  }
-
-  function handleDistributeHorizontal() {
-    if (!klass || selectedDeskIds.length < 3) return;
-    const selected = klass.room.desks
-      .filter((d) => selectedDeskIds.includes(d.id))
-      .slice()
-      .sort((a, b) => a.x - b.x);
-    const minX = selected[0].x;
-    const maxX = selected[selected.length - 1].x;
-    const step = (maxX - minX) / (selected.length - 1);
-    selected.forEach((d, i) => {
-      const newX = Math.round(minX + i * step);
-      if (d.x !== newX) updateDesk(klass.id, d.id, { x: newX });
-    });
+    exportStageAsPng(stageRef.current, `${klass.name.replace(/\s+/g, "_")}_${date}`);
   }
 
   function handleAssignSeat(seatId: SeatId, studentId: StudentId | null) {
@@ -209,9 +258,10 @@ export default function RoomDesigner() {
       <DeskPalette
         onPlaceSingle={handlePlaceSingle}
         onOpenMulti={handleOpenMulti}
+        onPlaceFurniture={handlePlaceFurniture}
         room={klass.room}
         onUpdateRoom={(patch) => updateRoom(klass.id, patch)}
-        selectionSize={selectedDeskIds.length}
+        selectionSize={selectedItemIds.length}
         onAlignVertical={handleAlignVertical}
         onAlignHorizontal={handleAlignHorizontal}
         onDistributeVertical={handleDistributeVertical}
@@ -221,8 +271,8 @@ export default function RoomDesigner() {
         <RoomStage
           ref={stageRef}
           room={klass.room}
-          selectedDeskIds={selectedDeskIds}
-          onSelectionChange={setSelectedDeskIds}
+          selectedItemIds={selectedItemIds}
+          onSelectionChange={setSelectedItemIds}
           students={klass.students}
           assignments={assignments}
           onAssignSeat={handleAssignSeat}
@@ -243,7 +293,7 @@ export default function RoomDesigner() {
         onAssignSeat={handleAssignSeat}
         onRandomize={handleRandomize}
         onSave={handleSaveArrangement}
-        onExportJpg={handleExportJpg}
+        onExportImage={handleExportImage}
       />
       <MultiShapeParamsDialog
         open={paramsDialog.open}
@@ -253,4 +303,19 @@ export default function RoomDesigner() {
       />
     </div>
   );
+}
+
+type SelectedItem =
+  | { kind: "desk"; entity: Desk }
+  | { kind: "furniture"; entity: Furniture };
+
+function collectSelectedItems(
+  desks: Desk[],
+  furniture: Furniture[],
+  selectedIds: string[],
+): SelectedItem[] {
+  const out: SelectedItem[] = [];
+  for (const d of desks) if (selectedIds.includes(d.id)) out.push({ kind: "desk", entity: d });
+  for (const f of furniture) if (selectedIds.includes(f.id)) out.push({ kind: "furniture", entity: f });
+  return out;
 }

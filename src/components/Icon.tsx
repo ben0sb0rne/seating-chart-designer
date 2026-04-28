@@ -160,6 +160,31 @@ const PATHS: Record<string, ReactNode> = {
       <path d="M3.51 15a9 9 0 1 0 .49-3.51" />
     </>
   ),
+  "help-circle": (
+    <>
+      <circle cx="12" cy="12" r="10" />
+      <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+      <line x1="12" y1="17" x2="12.01" y2="17" />
+    </>
+  ),
+  eye: (
+    <>
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </>
+  ),
+  undo: (
+    <>
+      <polyline points="3 7 8 7 8 12" />
+      <path d="M3 7s2-4 9-4 10 5 10 11-5 7-10 7c-3 0-5-2-5-2" />
+    </>
+  ),
+  redo: (
+    <>
+      <polyline points="21 7 16 7 16 12" />
+      <path d="M21 7s-2-4-9-4-10 5-10 11 5 7 10 7c3 0 5-2 5-2" />
+    </>
+  ),
 };
 
 export type IconName = keyof typeof PATHS;

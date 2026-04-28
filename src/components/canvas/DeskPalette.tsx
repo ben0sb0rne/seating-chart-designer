@@ -1,11 +1,13 @@
 import { useState } from "react";
-import type { DeskKind, Room, Wall } from "@/types";
+import type { DeskKind, FurnitureKind, Room, Wall } from "@/types";
 import { cn } from "@/lib/cn";
 import Icon from "@/components/Icon";
+import { FURNITURE_DEFAULTS, FURNITURE_KINDS, furnitureLabel } from "@/lib/furniture";
 
 interface Props {
   onPlaceSingle: (kind: DeskKind) => void;
   onOpenMulti: (kind: DeskKind) => void;
+  onPlaceFurniture: (kind: FurnitureKind) => void;
   room: Room;
   onUpdateRoom: (patch: Partial<Room>) => void;
   selectionSize: number;
@@ -37,6 +39,7 @@ const DEFAULT_ROOM_H = 700;
 export default function DeskPalette({
   onPlaceSingle,
   onOpenMulti,
+  onPlaceFurniture,
   room,
   onUpdateRoom,
   selectionSize,
@@ -81,6 +84,22 @@ export default function DeskPalette({
                 <ShapeIcon kind={it.kind} />
                 <span className="ml-2 flex-1 truncate text-left">{it.label}</span>
                 <Icon name="chevron-right" size={12} className="ml-1 text-ink-muted" />
+              </button>
+            </li>
+          ))}
+        </ul>
+
+        <div className="label mb-2">Furniture</div>
+        <ul className="mb-5 space-y-1">
+          {FURNITURE_KINDS.map((kind) => (
+            <li key={kind}>
+              <button
+                className="btn-secondary w-full justify-start"
+                onClick={() => onPlaceFurniture(kind)}
+                title="Click to add to room"
+              >
+                <FurnitureIcon kind={kind} />
+                <span className="ml-2 truncate">{furnitureLabel(kind)}</span>
               </button>
             </li>
           ))}
@@ -262,6 +281,56 @@ function NumberField({
       }}
     />
   );
+}
+
+function FurnitureIcon({ kind }: { kind: FurnitureKind }) {
+  const def = FURNITURE_DEFAULTS[kind];
+  const stroke = def.stroke;
+  const fill = def.fill;
+  const size = 18;
+  switch (kind) {
+    case "teacher-desk":
+      return (
+        <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
+          <rect x="2" y="6" width="16" height="8" fill={fill} stroke={stroke} rx="1" />
+          <text x="10" y="12" fontSize="4" textAnchor="middle" fill="#3b2010" fontWeight="bold">T</text>
+        </svg>
+      );
+    case "bookshelf":
+      return (
+        <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
+          <rect x="2" y="7" width="16" height="6" fill={fill} stroke={stroke} />
+          <line x1="2" y1="9" x2="18" y2="9" stroke={stroke} strokeWidth="0.5" />
+          <line x1="2" y1="11" x2="18" y2="11" stroke={stroke} strokeWidth="0.5" />
+        </svg>
+      );
+    case "window":
+      return (
+        <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
+          <rect x="2" y="9" width="16" height="2" fill={fill} stroke={stroke} />
+          <line x1="10" y1="9" x2="10" y2="11" stroke={stroke} strokeWidth="0.5" />
+        </svg>
+      );
+    case "whiteboard":
+      return (
+        <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
+          <rect x="1" y="9" width="18" height="2" fill={fill} stroke={stroke} />
+        </svg>
+      );
+    case "door":
+      return (
+        <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden fill="none">
+          <line x1="3" y1="4" x2="14" y2="4" stroke={stroke} strokeWidth="1.5" />
+          <path d="M 3 4 A 11 11 0 0 1 14 15 L 3 15 Z" fill="rgba(245,245,245,0.5)" stroke={stroke} strokeWidth="1" />
+        </svg>
+      );
+    case "plant":
+      return (
+        <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
+          <circle cx="10" cy="10" r="6" fill={fill} stroke={stroke} />
+        </svg>
+      );
+  }
 }
 
 function ShapeIcon({ kind }: { kind: DeskKind }) {

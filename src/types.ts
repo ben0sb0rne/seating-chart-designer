@@ -45,12 +45,33 @@ export interface Desk {
 
 export type Wall = "top" | "right" | "bottom" | "left";
 
+export type FurnitureKind =
+  | "teacher-desk"
+  | "bookshelf"
+  | "window"
+  | "whiteboard"
+  | "door"
+  | "plant";
+
+export type FurnitureId = string;
+
+export interface Furniture {
+  id: FurnitureId;
+  kind: FurnitureKind;
+  x: number;
+  y: number;
+  rotation: number;
+  width: number;
+  height: number;
+}
+
 export interface Room {
   width: number;
   height: number;
   /** Which wall the teacher considers the "front" of the room. Defaults to "top". */
   frontWall: Wall;
   desks: Desk[];
+  furniture: Furniture[];
 }
 
 export interface Arrangement {

@@ -24,6 +24,7 @@
     "react-konva": "^18.2.10",
     "react-router-dom": "^6.27.0",
     "tailwind-merge": "^2.5.4",
+    "zundo": "^2.3.0",
     "zustand": "^4.5.5"
   },
   "devDependencies": {

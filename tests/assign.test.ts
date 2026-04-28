@@ -35,7 +35,7 @@ function student(name: string, opts?: Partial<Student>): Student {
 }
 
 function room(desks: Desk[]): Room {
-  return { width: 1000, height: 700, frontWall: "top", desks };
+  return { width: 1000, height: 700, frontWall: "top", desks, furniture: [] };
 }
 
 describe("assign", () => {

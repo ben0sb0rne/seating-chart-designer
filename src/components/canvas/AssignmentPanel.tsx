@@ -9,7 +9,7 @@ interface Props {
   onAssignSeat: (seatId: SeatId, studentId: StudentId | null) => void;
   onRandomize: () => void;
   onSave: () => void;
-  onExportJpg: () => void;
+  onExportImage: () => void;
 }
 
 export default function AssignmentPanel({
@@ -18,7 +18,7 @@ export default function AssignmentPanel({
   onAssignSeat,
   onRandomize,
   onSave,
-  onExportJpg,
+  onExportImage,
 }: Props) {
   const seats = useMemo(() => roomSeats(klass.room), [klass.room]);
   const seated = new Set(Object.values(assignments));
@@ -35,9 +35,9 @@ export default function AssignmentPanel({
           <Icon name="save" size={14} />
           Save this arrangement
         </button>
-        <button className="btn-secondary w-full" onClick={onExportJpg}>
+        <button className="btn-secondary w-full" onClick={onExportImage}>
           <Icon name="image" size={14} />
-          Export JPG
+          Export PNG
         </button>
       </div>
 

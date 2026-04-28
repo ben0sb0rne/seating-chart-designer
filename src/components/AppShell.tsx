@@ -1,13 +1,36 @@
+import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useMatch, useParams } from "react-router-dom";
 import { useAppStore } from "@/store/appStore";
 import { cn } from "@/lib/cn";
 import ImportExportMenu from "@/components/ImportExportMenu";
+import HelpDialog from "@/components/HelpDialog";
 import Icon from "@/components/Icon";
 
 export default function AppShell() {
   const { id } = useParams();
   const isClassRoute = useMatch("/classes/:id/*");
   const klass = useAppStore((s) => (id ? s.classes.find((c) => c.id === id) : undefined));
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  // Global undo / redo (works on every screen).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      if (key === "z" && !e.shiftKey) {
+        e.preventDefault();
+        useAppStore.temporal.getState().undo();
+      } else if ((key === "z" && e.shiftKey) || key === "y") {
+        e.preventDefault();
+        useAppStore.temporal.getState().redo();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   return (
     <div className="flex h-full flex-col">
@@ -35,11 +58,22 @@ export default function AppShell() {
             </>
           )}
         </div>
-        <ImportExportMenu />
+        <div className="flex items-center gap-2">
+          <button
+            className="btn-secondary"
+            onClick={() => setHelpOpen(true)}
+            title="Keyboard shortcuts"
+          >
+            <Icon name="help-circle" size={14} />
+            <span className="hidden md:inline">Help</span>
+          </button>
+          <ImportExportMenu />
+        </div>
       </header>
       <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <Outlet />
       </main>
+      <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
     </div>
   );
 }

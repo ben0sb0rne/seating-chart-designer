@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { temporal } from "zundo";
 import type {
   AppState,
   Arrangement,
@@ -8,6 +9,8 @@ import type {
   ClassRoom,
   Desk,
   DeskId,
+  Furniture,
+  FurnitureId,
   Room,
   Seat,
   SeatId,
@@ -18,12 +21,18 @@ import { SCHEMA_VERSION } from "@/types";
 
 const uid = () => crypto.randomUUID();
 
-const DEFAULT_ROOM = (): Room => ({ width: 1000, height: 700, frontWall: "top", desks: [] });
+const DEFAULT_ROOM = (): Room => ({
+  width: 1000,
+  height: 700,
+  frontWall: "top",
+  desks: [],
+  furniture: [],
+});
 
 interface AppActions {
-  // Class CRUD
-  createClass: (name: string) => ClassId;
-  renameClass: (id: ClassId, name: string) => void;
+  // Class CRUD (uniqueness-checked)
+  createClass: (name: string) => ClassId | null;
+  renameClass: (id: ClassId, name: string) => boolean;
   deleteClass: (id: ClassId) => void;
   setActiveClass: (id: ClassId | null) => void;
 
@@ -42,6 +51,12 @@ interface AppActions {
   setSeatFrontRow: (classId: ClassId, deskId: DeskId, seatId: SeatId, value: boolean) => void;
   setDeskFrontRow: (classId: ClassId, deskId: DeskId, value: boolean) => void;
   updateSeat: (classId: ClassId, deskId: DeskId, seatId: SeatId, patch: Partial<Seat>) => void;
+
+  // Furniture
+  addFurniture: (classId: ClassId, item: Furniture) => void;
+  addFurnitures: (classId: ClassId, items: Furniture[]) => void;
+  updateFurniture: (classId: ClassId, furnitureId: FurnitureId, patch: Partial<Furniture>) => void;
+  removeFurniture: (classId: ClassId, furnitureIds: FurnitureId[]) => void;
 
   // Arrangements
   saveArrangement: (
@@ -63,6 +78,43 @@ function findClass(state: AppState, id: ClassId): ClassRoom | undefined {
 
 function withClass(state: AppState, id: ClassId, mutate: (c: ClassRoom) => ClassRoom): AppState {
   return { ...state, classes: state.classes.map((c) => (c.id === id ? mutate(c) : c)) };
+}
+
+function nameExists(state: AppState, name: string, excludeId?: ClassId): boolean {
+  const target = name.trim().toLowerCase();
+  return state.classes.some(
+    (c) => c.id !== excludeId && c.name.trim().toLowerCase() === target,
+  );
+}
+
+/** v4 → v5: rooms gain a `furniture` array. Default to empty so behavior is unchanged. */
+function migrateV4toV5(persisted: unknown): AppState {
+  const obj = persisted as Record<string, unknown>;
+  const classes = (obj.classes ?? []) as Array<Record<string, unknown>>;
+  const migratedClasses = classes.map((klass) => {
+    const room = (klass.room ?? {
+      width: 1000,
+      height: 700,
+      frontWall: "top",
+      desks: [],
+      furniture: [],
+    }) as Record<string, unknown>;
+    return {
+      ...(klass as object),
+      room: {
+        width: (room.width as number) ?? 1000,
+        height: (room.height as number) ?? 700,
+        frontWall: (room.frontWall as string) ?? "top",
+        desks: (room.desks as unknown[]) ?? [],
+        furniture: (room.furniture as unknown[]) ?? [],
+      },
+    } as unknown as ClassRoom;
+  });
+  return {
+    classes: migratedClasses,
+    activeClassId: (obj.activeClassId as string | null) ?? null,
+    schemaVersion: SCHEMA_VERSION,
+  };
 }
 
 /** v3 → v4: the "single-circle" desk kind was removed; convert any existing ones to single-rect. */
@@ -135,7 +187,7 @@ function migrateV1toV2(persisted: unknown): AppState {
       id: klass.id as string,
       name: klass.name as string,
       students: (klass.students as Student[]) ?? [],
-      room: { width: room.width, height: room.height, frontWall: "top", desks },
+      room: { width: room.width, height: room.height, frontWall: "top", desks, furniture: [] },
       arrangements: (klass.arrangements as Arrangement[]) ?? [],
     };
   });
@@ -157,7 +209,6 @@ function migrateV1toV2(persisted: unknown): AppState {
 }
 
 function migrateDesk(d: Record<string, unknown>, onCustomDropped: () => void): Desk {
-  // If the desk already has a `kind` field, it's already v2 — pass through.
   if (typeof d.kind === "string") {
     return d as unknown as Desk;
   }
@@ -184,7 +235,6 @@ function migrateDesk(d: Record<string, unknown>, onCustomDropped: () => void): D
     case "table-round-6":
       return { ...base, kind: "multi-circle", width: 162, height: 162, seatCount: 6 };
     default:
-      // Unknown / custom shape — fall back to single-rect.
       onCustomDropped();
       return { ...base, kind: "single-rect", width: 60, height: 50 };
   }
@@ -192,182 +242,244 @@ function migrateDesk(d: Record<string, unknown>, onCustomDropped: () => void): D
 
 export const useAppStore = create<AppStore>()(
   persist(
-    (set) => ({
-      classes: [],
-      activeClassId: null,
-      schemaVersion: SCHEMA_VERSION,
+    temporal(
+      (set, get) => ({
+        classes: [],
+        activeClassId: null,
+        schemaVersion: SCHEMA_VERSION,
 
-      createClass: (name) => {
-        const id = uid();
-        const klass: ClassRoom = { id, name, students: [], room: DEFAULT_ROOM(), arrangements: [] };
-        set((s) => ({ ...s, classes: [...s.classes, klass], activeClassId: s.activeClassId ?? id }));
-        return id;
-      },
+        createClass: (name) => {
+          const trimmed = name.trim();
+          if (!trimmed) return null;
+          if (nameExists(get(), trimmed)) return null;
+          const id = uid();
+          const klass: ClassRoom = {
+            id,
+            name: trimmed,
+            students: [],
+            room: DEFAULT_ROOM(),
+            arrangements: [],
+          };
+          set((s) => ({ ...s, classes: [...s.classes, klass], activeClassId: s.activeClassId ?? id }));
+          return id;
+        },
 
-      renameClass: (id, name) =>
-        set((s) => withClass(s, id, (c) => ({ ...c, name }))),
+        renameClass: (id, name) => {
+          const trimmed = name.trim();
+          if (!trimmed) return false;
+          if (nameExists(get(), trimmed, id)) return false;
+          set((s) => withClass(s, id, (c) => ({ ...c, name: trimmed })));
+          return true;
+        },
 
-      deleteClass: (id) =>
-        set((s) => ({
-          ...s,
-          classes: s.classes.filter((c) => c.id !== id),
-          activeClassId: s.activeClassId === id ? null : s.activeClassId,
-        })),
-
-      setActiveClass: (id) => set((s) => ({ ...s, activeClassId: id })),
-
-      addStudents: (classId, names) =>
-        set((s) =>
-          withClass(s, classId, (c) => {
-            const fresh: Student[] = names
-              .map((n) => n.trim())
-              .filter(Boolean)
-              .map((name) => ({ id: uid(), name, needsFrontRow: false, keepApart: [] }));
-            return { ...c, students: [...c.students, ...fresh] };
-          }),
-        ),
-
-      updateStudent: (classId, studentId, patch) =>
-        set((s) =>
-          withClass(s, classId, (c) => ({
-            ...c,
-            students: c.students.map((st) => (st.id === studentId ? { ...st, ...patch } : st)),
+        deleteClass: (id) =>
+          set((s) => ({
+            ...s,
+            classes: s.classes.filter((c) => c.id !== id),
+            activeClassId: s.activeClassId === id ? null : s.activeClassId,
           })),
-        ),
 
-      removeStudent: (classId, studentId) =>
-        set((s) =>
-          withClass(s, classId, (c) => ({
-            ...c,
-            students: c.students
-              .filter((st) => st.id !== studentId)
-              .map((st) => ({ ...st, keepApart: st.keepApart.filter((id) => id !== studentId) })),
-            arrangements: c.arrangements.map((a) => {
-              const next: Record<SeatId, StudentId> = {};
-              for (const [seat, sid] of Object.entries(a.assignments)) {
-                if (sid !== studentId) next[seat] = sid;
-              }
-              return { ...a, assignments: next };
+        setActiveClass: (id) => set((s) => ({ ...s, activeClassId: id })),
+
+        addStudents: (classId, names) =>
+          set((s) =>
+            withClass(s, classId, (c) => {
+              const fresh: Student[] = names
+                .map((n) => n.trim())
+                .filter(Boolean)
+                .map((name) => ({ id: uid(), name, needsFrontRow: false, keepApart: [] }));
+              return { ...c, students: [...c.students, ...fresh] };
             }),
-          })),
-        ),
+          ),
 
-      toggleKeepApart: (classId, a, b) =>
-        set((s) =>
-          withClass(s, classId, (c) => ({
-            ...c,
-            students: c.students.map((st) => {
-              if (st.id === a) {
-                const has = st.keepApart.includes(b);
-                return { ...st, keepApart: has ? st.keepApart.filter((x) => x !== b) : [...st.keepApart, b] };
-              }
-              if (st.id === b) {
-                const has = st.keepApart.includes(a);
-                return { ...st, keepApart: has ? st.keepApart.filter((x) => x !== a) : [...st.keepApart, a] };
-              }
-              return st;
-            }),
-          })),
-        ),
-
-      addDesk: (classId, desk) =>
-        set((s) => withClass(s, classId, (c) => ({ ...c, room: { ...c.room, desks: [...c.room.desks, desk] } }))),
-
-      addDesks: (classId, desks) =>
-        set((s) => withClass(s, classId, (c) => ({ ...c, room: { ...c.room, desks: [...c.room.desks, ...desks] } }))),
-
-      updateRoom: (classId, patch) =>
-        set((s) => withClass(s, classId, (c) => ({ ...c, room: { ...c.room, ...patch } }))),
-
-      updateDesk: (classId, deskId, patch) =>
-        set((s) =>
-          withClass(s, classId, (c) => ({
-            ...c,
-            room: { ...c.room, desks: c.room.desks.map((d) => (d.id === deskId ? { ...d, ...patch } : d)) },
-          })),
-        ),
-
-      removeDesks: (classId, deskIds) =>
-        set((s) =>
-          withClass(s, classId, (c) => {
-            const remaining = c.room.desks.filter((d) => !deskIds.includes(d.id));
-            const removedSeatIds = new Set(
-              c.room.desks.filter((d) => deskIds.includes(d.id)).flatMap((d) => d.seats.map((seat) => seat.id)),
-            );
-            return {
+        updateStudent: (classId, studentId, patch) =>
+          set((s) =>
+            withClass(s, classId, (c) => ({
               ...c,
-              room: { ...c.room, desks: remaining },
+              students: c.students.map((st) => (st.id === studentId ? { ...st, ...patch } : st)),
+            })),
+          ),
+
+        removeStudent: (classId, studentId) =>
+          set((s) =>
+            withClass(s, classId, (c) => ({
+              ...c,
+              students: c.students
+                .filter((st) => st.id !== studentId)
+                .map((st) => ({ ...st, keepApart: st.keepApart.filter((id) => id !== studentId) })),
               arrangements: c.arrangements.map((a) => {
                 const next: Record<SeatId, StudentId> = {};
                 for (const [seat, sid] of Object.entries(a.assignments)) {
-                  if (!removedSeatIds.has(seat)) next[seat] = sid;
+                  if (sid !== studentId) next[seat] = sid;
                 }
                 return { ...a, assignments: next };
               }),
-            };
-          }),
-        ),
+            })),
+          ),
 
-      setSeatFrontRow: (classId, deskId, seatId, value) =>
-        set((s) =>
-          withClass(s, classId, (c) => ({
-            ...c,
-            room: {
-              ...c.room,
-              desks: c.room.desks.map((d) =>
-                d.id === deskId
-                  ? { ...d, seats: d.seats.map((seat) => (seat.id === seatId ? { ...seat, isFrontRow: value } : seat)) }
-                  : d,
-              ),
-            },
-          })),
-        ),
+        toggleKeepApart: (classId, a, b) =>
+          set((s) =>
+            withClass(s, classId, (c) => ({
+              ...c,
+              students: c.students.map((st) => {
+                if (st.id === a) {
+                  const has = st.keepApart.includes(b);
+                  return { ...st, keepApart: has ? st.keepApart.filter((x) => x !== b) : [...st.keepApart, b] };
+                }
+                if (st.id === b) {
+                  const has = st.keepApart.includes(a);
+                  return { ...st, keepApart: has ? st.keepApart.filter((x) => x !== a) : [...st.keepApart, a] };
+                }
+                return st;
+              }),
+            })),
+          ),
 
-      setDeskFrontRow: (classId, deskId, value) =>
-        set((s) =>
-          withClass(s, classId, (c) => ({
-            ...c,
-            room: {
-              ...c.room,
-              desks: c.room.desks.map((d) =>
-                d.id === deskId ? { ...d, seats: d.seats.map((seat) => ({ ...seat, isFrontRow: value })) } : d,
-              ),
-            },
-          })),
-        ),
+        addDesk: (classId, desk) =>
+          set((s) => withClass(s, classId, (c) => ({ ...c, room: { ...c.room, desks: [...c.room.desks, desk] } }))),
 
-      updateSeat: (classId, deskId, seatId, patch) =>
-        set((s) =>
-          withClass(s, classId, (c) => ({
-            ...c,
-            room: {
-              ...c.room,
-              desks: c.room.desks.map((d) =>
-                d.id === deskId
-                  ? { ...d, seats: d.seats.map((seat) => (seat.id === seatId ? { ...seat, ...patch } : seat)) }
-                  : d,
-              ),
-            },
-          })),
-        ),
+        addDesks: (classId, desks) =>
+          set((s) => withClass(s, classId, (c) => ({ ...c, room: { ...c.room, desks: [...c.room.desks, ...desks] } }))),
 
-      saveArrangement: (classId, assignments, label) => {
-        const id = uid();
-        const arr: Arrangement = { id, createdAt: new Date().toISOString(), label, assignments: { ...assignments } };
-        set((s) => withClass(s, classId, (c) => ({ ...c, arrangements: [arr, ...c.arrangements] })));
-        return { id };
+        updateRoom: (classId, patch) =>
+          set((s) => withClass(s, classId, (c) => ({ ...c, room: { ...c.room, ...patch } }))),
+
+        updateDesk: (classId, deskId, patch) =>
+          set((s) =>
+            withClass(s, classId, (c) => ({
+              ...c,
+              room: { ...c.room, desks: c.room.desks.map((d) => (d.id === deskId ? { ...d, ...patch } : d)) },
+            })),
+          ),
+
+        removeDesks: (classId, deskIds) =>
+          set((s) =>
+            withClass(s, classId, (c) => {
+              const remaining = c.room.desks.filter((d) => !deskIds.includes(d.id));
+              const removedSeatIds = new Set(
+                c.room.desks.filter((d) => deskIds.includes(d.id)).flatMap((d) => d.seats.map((seat) => seat.id)),
+              );
+              return {
+                ...c,
+                room: { ...c.room, desks: remaining },
+                arrangements: c.arrangements.map((a) => {
+                  const next: Record<SeatId, StudentId> = {};
+                  for (const [seat, sid] of Object.entries(a.assignments)) {
+                    if (!removedSeatIds.has(seat)) next[seat] = sid;
+                  }
+                  return { ...a, assignments: next };
+                }),
+              };
+            }),
+          ),
+
+        setSeatFrontRow: (classId, deskId, seatId, value) =>
+          set((s) =>
+            withClass(s, classId, (c) => ({
+              ...c,
+              room: {
+                ...c.room,
+                desks: c.room.desks.map((d) =>
+                  d.id === deskId
+                    ? { ...d, seats: d.seats.map((seat) => (seat.id === seatId ? { ...seat, isFrontRow: value } : seat)) }
+                    : d,
+                ),
+              },
+            })),
+          ),
+
+        setDeskFrontRow: (classId, deskId, value) =>
+          set((s) =>
+            withClass(s, classId, (c) => ({
+              ...c,
+              room: {
+                ...c.room,
+                desks: c.room.desks.map((d) =>
+                  d.id === deskId ? { ...d, seats: d.seats.map((seat) => ({ ...seat, isFrontRow: value })) } : d,
+                ),
+              },
+            })),
+          ),
+
+        updateSeat: (classId, deskId, seatId, patch) =>
+          set((s) =>
+            withClass(s, classId, (c) => ({
+              ...c,
+              room: {
+                ...c.room,
+                desks: c.room.desks.map((d) =>
+                  d.id === deskId
+                    ? { ...d, seats: d.seats.map((seat) => (seat.id === seatId ? { ...seat, ...patch } : seat)) }
+                    : d,
+                ),
+              },
+            })),
+          ),
+
+        addFurniture: (classId, item) =>
+          set((s) =>
+            withClass(s, classId, (c) => ({
+              ...c,
+              room: { ...c.room, furniture: [...(c.room.furniture ?? []), item] },
+            })),
+          ),
+
+        addFurnitures: (classId, items) =>
+          set((s) =>
+            withClass(s, classId, (c) => ({
+              ...c,
+              room: { ...c.room, furniture: [...(c.room.furniture ?? []), ...items] },
+            })),
+          ),
+
+        updateFurniture: (classId, furnitureId, patch) =>
+          set((s) =>
+            withClass(s, classId, (c) => ({
+              ...c,
+              room: {
+                ...c.room,
+                furniture: (c.room.furniture ?? []).map((f) =>
+                  f.id === furnitureId ? { ...f, ...patch } : f,
+                ),
+              },
+            })),
+          ),
+
+        removeFurniture: (classId, furnitureIds) =>
+          set((s) =>
+            withClass(s, classId, (c) => ({
+              ...c,
+              room: {
+                ...c.room,
+                furniture: (c.room.furniture ?? []).filter((f) => !furnitureIds.includes(f.id)),
+              },
+            })),
+          ),
+
+        saveArrangement: (classId, assignments, label) => {
+          const id = uid();
+          const arr: Arrangement = { id, createdAt: new Date().toISOString(), label, assignments: { ...assignments } };
+          set((s) => withClass(s, classId, (c) => ({ ...c, arrangements: [arr, ...c.arrangements] })));
+          return { id };
+        },
+
+        deleteArrangement: (classId, arrangementId) =>
+          set((s) =>
+            withClass(s, classId, (c) => ({
+              ...c,
+              arrangements: c.arrangements.filter((a) => a.id !== arrangementId),
+            })),
+          ),
+
+        replaceState: (next) => set(() => ({ ...next })),
+      }),
+      {
+        // Only the user-data slice goes through undo/redo; not transient or
+        // function fields. limit prevents unbounded history growth.
+        limit: 100,
+        partialize: (state) => ({ classes: state.classes }),
       },
-
-      deleteArrangement: (classId, arrangementId) =>
-        set((s) =>
-          withClass(s, classId, (c) => ({
-            ...c,
-            arrangements: c.arrangements.filter((a) => a.id !== arrangementId),
-          })),
-        ),
-
-      replaceState: (next) => set(() => ({ ...next })),
-    }),
+    ),
     {
       name: "seating-chart-designer:v1",
       version: SCHEMA_VERSION,
@@ -376,6 +488,7 @@ export const useAppStore = create<AppStore>()(
         if (fromVersion < 2) s = migrateV1toV2(s);
         if (fromVersion < 3) s = migrateV2toV3(s);
         if (fromVersion < 4) s = migrateV3toV4(s);
+        if (fromVersion < 5) s = migrateV4toV5(s);
         return s as AppState;
       },
     },

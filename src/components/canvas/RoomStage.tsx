@@ -3,6 +3,7 @@ import { Stage, Layer, Rect, Line } from "react-konva";
 import type Konva from "konva";
 import type { ClassId, Room, SeatId, Student, StudentId, Wall } from "@/types";
 import DeskNode from "./DeskNode";
+import FurnitureNode from "./FurnitureNode";
 import SeatPicker from "./SeatPicker";
 import { snapDeskPosition, type Guide } from "@/lib/snap";
 import Icon, { type IconName } from "@/components/Icon";
@@ -41,7 +42,7 @@ function FrontOfRoomLabel({ frontWall }: { frontWall: Wall }) {
 
 interface Props {
   room: Room;
-  selectedDeskIds: string[];
+  selectedItemIds: string[];
   onSelectionChange: (ids: string[]) => void;
   students: Student[];
   assignments: Record<SeatId, StudentId>;
@@ -50,7 +51,6 @@ interface Props {
 }
 
 interface Marquee {
-  /** Both points in room coordinates. */
   x1: number;
   y1: number;
   x2: number;
@@ -58,7 +58,7 @@ interface Marquee {
 }
 
 const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
-  { room, selectedDeskIds, onSelectionChange, students, assignments, onAssignSeat, classId },
+  { room, selectedItemIds, onSelectionChange, students, assignments, onAssignSeat, classId },
   ref,
 ) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -91,7 +91,6 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
   const offsetX = (size.w - room.width * safeScale) / 2;
   const offsetY = (size.h - room.height * safeScale) / 2;
 
-  /** Translate the current pointer's stage-coords into room coordinates. */
   function pointerToRoom(): { x: number; y: number } | null {
     const layer = layerRef.current;
     const stage = stageRef.current;
@@ -102,25 +101,24 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
     return transform.point(point);
   }
 
-  function handleSelectDesk(deskId: string, additive: boolean) {
+  function handleSelectItem(itemId: string, additive: boolean) {
     if (additive) {
       onSelectionChange(
-        selectedDeskIds.includes(deskId)
-          ? selectedDeskIds.filter((id) => id !== deskId)
-          : [...selectedDeskIds, deskId],
+        selectedItemIds.includes(itemId)
+          ? selectedItemIds.filter((id) => id !== itemId)
+          : [...selectedItemIds, itemId],
       );
     } else {
-      onSelectionChange([deskId]);
+      onSelectionChange([itemId]);
     }
   }
 
   function handleStagePointerDown(e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) {
-    // Marquee only starts when the gesture begins on empty room background.
     if (e.target !== e.target.getStage() && e.target.attrs.id !== "room-bg") return;
     const pt = pointerToRoom();
     if (!pt) return;
     setMarquee({ x1: pt.x, y1: pt.y, x2: pt.x, y2: pt.y });
-    onSelectionChange([]); // start fresh; the marquee will populate it as it grows
+    onSelectionChange([]);
   }
 
   function handleStagePointerMove() {
@@ -129,16 +127,21 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
     if (!pt) return;
     const next = { ...marquee, x2: pt.x, y2: pt.y };
     setMarquee(next);
-    // Live-update selection.
     const minX = Math.min(next.x1, next.x2);
     const maxX = Math.max(next.x1, next.x2);
     const minY = Math.min(next.y1, next.y2);
     const maxY = Math.max(next.y1, next.y2);
-    const inside = room.desks
-      .filter((d) =>
-        d.x + d.width >= minX && d.x <= maxX && d.y + d.height >= minY && d.y <= maxY,
-      )
-      .map((d) => d.id);
+    const inside: string[] = [];
+    for (const d of room.desks) {
+      if (d.x + d.width >= minX && d.x <= maxX && d.y + d.height >= minY && d.y <= maxY) {
+        inside.push(d.id);
+      }
+    }
+    for (const f of room.furniture ?? []) {
+      if (f.x + f.width >= minX && f.x <= maxX && f.y + f.height >= minY && f.y <= maxY) {
+        inside.push(f.id);
+      }
+    }
     onSelectionChange(inside);
   }
 
@@ -178,12 +181,25 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
             dash={[12 / safeScale, 8 / safeScale]}
           />
 
+          {/* Furniture renders before desks so desks visually overlay it. */}
+          {(room.furniture ?? []).map((f) => (
+            <FurnitureNode
+              key={f.id}
+              furniture={f}
+              selected={selectedItemIds.includes(f.id)}
+              onSelect={(additive) => handleSelectItem(f.id, additive)}
+              onDragMove={(_id, x, y) => ({ x, y })}
+              onDragEnd={() => undefined}
+              classId={classId}
+            />
+          ))}
+
           {room.desks.map((desk) => (
             <DeskNode
               key={desk.id}
               desk={desk}
-              selected={selectedDeskIds.includes(desk.id)}
-              onSelect={(additive) => handleSelectDesk(desk.id, additive)}
+              selected={selectedItemIds.includes(desk.id)}
+              onSelect={(additive) => handleSelectItem(desk.id, additive)}
               students={students}
               assignments={assignments}
               onSeatClick={(seatId, x, y) => {
