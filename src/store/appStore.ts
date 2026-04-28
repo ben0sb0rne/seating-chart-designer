@@ -109,7 +109,7 @@ function migrateV1toV2(persisted: unknown): AppState {
       id: klass.id as string,
       name: klass.name as string,
       students: (klass.students as Student[]) ?? [],
-      room: { width: room.width, height: room.height, desks },
+      room: { width: room.width, height: room.height, frontWall: "top", desks },
       arrangements: (klass.arrangements as Arrangement[]) ?? [],
     };
   });
