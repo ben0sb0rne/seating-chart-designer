@@ -159,20 +159,12 @@ export default function DeskNode({
               setSeatFrontRow(classId, desk.id, seat.id, !seat.isFrontRow);
             }}
           >
-            {seat.isFrontRow && (
-              <Circle
-                radius={NAME_BOX_WIDTH / 2.4}
-                fill="#fde68a"
-                stroke="#b45309"
-                strokeWidth={1}
-                opacity={0.55}
-              />
-            )}
             {!student ? (
               <Circle
+                name="empty-seat-dot"
                 radius={SEAT_DOT_RADIUS}
                 fill="#ffffff"
-                stroke={seat.isFrontRow ? "#b45309" : "#94a3b8"}
+                stroke="#94a3b8"
                 strokeWidth={1.5}
               />
             ) : (
@@ -188,6 +180,17 @@ export default function DeskNode({
                 offsetX={NAME_BOX_WIDTH / 2}
                 offsetY={NAME_BOX_HEIGHT / 2}
                 listening
+              />
+            )}
+            {seat.isFrontRow && (
+              <Circle
+                name="front-row-marker"
+                x={SEAT_DOT_RADIUS + 4}
+                y={-(SEAT_DOT_RADIUS + 4)}
+                radius={3.5}
+                fill="#f59e0b"
+                stroke="#92400e"
+                strokeWidth={0.5}
               />
             )}
           </Group>
