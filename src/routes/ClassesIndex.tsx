@@ -136,13 +136,18 @@ export default function ClassesIndex() {
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
                     <Link
+                      to={`/classes/${c.id}/roster`}
+                      className="btn-secondary whitespace-nowrap"
+                    >
+                      Roster
+                    </Link>
+                    <Link
                       to={`/classes/${c.id}/room`}
                       className="btn-primary whitespace-nowrap"
                     >
                       Open room
                     </Link>
                     <ClassMenu
-                      onRoster={() => navigate(`/classes/${c.id}/roster`)}
                       onRename={() => startRename(c.id, c.name)}
                       onDuplicate={() => {
                         const newId = duplicateClass(c.id);
@@ -168,12 +173,10 @@ function pluralise(n: number, word: string): string {
 }
 
 function ClassMenu({
-  onRoster,
   onRename,
   onDuplicate,
   onDelete,
 }: {
-  onRoster: () => void;
   onRename: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -191,7 +194,6 @@ function ClassMenu({
           sideOffset={6}
           className="z-50 w-40 rounded-md border border-slate-200 bg-white p-1 text-sm shadow-lg"
         >
-          <MenuItem onSelect={onRoster} icon="users" label="Roster" />
           <MenuItem onSelect={onRename} icon="edit" label="Rename" />
           <MenuItem onSelect={onDuplicate} icon="copy" label="Duplicate" />
           <DropdownMenu.Separator className="my-1 h-px bg-slate-200" />

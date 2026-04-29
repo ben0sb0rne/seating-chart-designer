@@ -251,8 +251,6 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
     const result = snapPosition({ ...me, x, y }, x, y, allItems);
     setGuides(result.guides);
 
-    // Multi-drag: apply the same delta to all other selected items live so
-    // they visually move together.
     const session = dragSession.current;
     if (session && session.initialPositions.size > 1) {
       const initial = session.initialPositions.get(itemId);
@@ -267,6 +265,10 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
             node.y(pos.y + dy);
           }
         }
+        // Force the multi-select Transformer to recompute its bounding box so
+        // its border/handles/rotation pivot stay centered on the whole group
+        // as it moves, instead of drifting behind on the dragged item.
+        transformerRef.current?.forceUpdate();
       }
     }
 
@@ -394,6 +396,11 @@ const RoomStage = forwardRef<Konva.Stage, Props>(function RoomStage(
             rotateEnabled={!locked}
             resizeEnabled={!locked}
             keepRatio={transformerKeepRatio}
+            // For multi-select, scale/rotate pivots from the group's center
+            // (the bounding box's geometric middle) instead of the corner
+            // opposite the dragged anchor. Single-select keeps default
+            // corner-anchored scaling.
+            centeredScaling={selectedItemIds.length > 1}
             rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
             rotationSnapTolerance={shiftHeld ? 23 : 5}
             borderStroke="#0284c7"

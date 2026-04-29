@@ -261,11 +261,17 @@ export default function RoomDesigner() {
   function handleAlignVertical() {
     if (!klass || selectedItemIds.length < 2) return;
     const items = collectSelectedItems(klass.room.desks, klass.room.furniture ?? [], selectedItemIds);
-    const targetX = Math.min(...items.map((it) => it.entity.x));
+    // Align centers (X-center) — items end up in a vertical column with their
+    // centers on the same X line, regardless of width. Reference is the
+    // bounding box center, so the group stays where it was.
+    const minX = Math.min(...items.map((it) => it.entity.x));
+    const maxX = Math.max(...items.map((it) => it.entity.x + it.entity.width));
+    const centerX = (minX + maxX) / 2;
     for (const it of items) {
-      if (it.entity.x !== targetX) {
-        if (it.kind === "desk") updateDesk(klass.id, it.entity.id, { x: targetX });
-        else updateFurniture(klass.id, it.entity.id, { x: targetX });
+      const newX = Math.round(centerX - it.entity.width / 2);
+      if (it.entity.x !== newX) {
+        if (it.kind === "desk") updateDesk(klass.id, it.entity.id, { x: newX });
+        else updateFurniture(klass.id, it.entity.id, { x: newX });
       }
     }
   }
@@ -273,11 +279,16 @@ export default function RoomDesigner() {
   function handleAlignHorizontal() {
     if (!klass || selectedItemIds.length < 2) return;
     const items = collectSelectedItems(klass.room.desks, klass.room.furniture ?? [], selectedItemIds);
-    const targetY = Math.min(...items.map((it) => it.entity.y));
+    // Align centers (Y-center) — items end up in a row with their centers on
+    // the same Y line, regardless of height.
+    const minY = Math.min(...items.map((it) => it.entity.y));
+    const maxY = Math.max(...items.map((it) => it.entity.y + it.entity.height));
+    const centerY = (minY + maxY) / 2;
     for (const it of items) {
-      if (it.entity.y !== targetY) {
-        if (it.kind === "desk") updateDesk(klass.id, it.entity.id, { y: targetY });
-        else updateFurniture(klass.id, it.entity.id, { y: targetY });
+      const newY = Math.round(centerY - it.entity.height / 2);
+      if (it.entity.y !== newY) {
+        if (it.kind === "desk") updateDesk(klass.id, it.entity.id, { y: newY });
+        else updateFurniture(klass.id, it.entity.id, { y: newY });
       }
     }
   }

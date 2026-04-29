@@ -72,7 +72,17 @@ export default function AppShell() {
             </>
           )}
         </div>
-        <TopbarMenu onOpenHelp={() => setHelpOpen(true)} />
+        <div className="flex items-center gap-2">
+          <button
+            className="btn-secondary"
+            onClick={() => setHelpOpen(true)}
+            title="Keyboard shortcuts (?)"
+          >
+            <Icon name="help-circle" size={14} />
+            <span className="hidden md:inline">Help</span>
+          </button>
+          <TopbarMenu />
+        </div>
       </header>
       <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <Outlet />
@@ -82,7 +92,7 @@ export default function AppShell() {
   );
 }
 
-function TopbarMenu({ onOpenHelp }: { onOpenHelp: () => void }) {
+function TopbarMenu() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   function exportNow() {
@@ -142,15 +152,6 @@ function TopbarMenu({ onOpenHelp }: { onOpenHelp: () => void }) {
             sideOffset={6}
             className="z-50 w-44 rounded-md border border-slate-200 bg-white p-1 text-sm shadow-lg"
           >
-            <DropdownMenu.Item
-              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 outline-none data-[highlighted]:bg-slate-100"
-              onSelect={onOpenHelp}
-            >
-              <Icon name="help-circle" size={14} />
-              <span>Help</span>
-              <span className="ml-auto text-xs text-ink-muted">?</span>
-            </DropdownMenu.Item>
-            <DropdownMenu.Separator className="my-1 h-px bg-slate-200" />
             <DropdownMenu.Item
               className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 outline-none data-[highlighted]:bg-slate-100"
               onSelect={() => fileRef.current?.click()}
