@@ -229,6 +229,13 @@ const PATHS: Record<string, ReactNode> = {
       <polyline points="6 17 11 12 6 7" />
     </>
   ),
+  "more-horizontal": (
+    <>
+      <circle cx="12" cy="12" r="1" fill="currentColor" />
+      <circle cx="19" cy="12" r="1" fill="currentColor" />
+      <circle cx="5" cy="12" r="1" fill="currentColor" />
+    </>
+  ),
 };
 
 export type IconName = keyof typeof PATHS;

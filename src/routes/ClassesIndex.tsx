@@ -1,7 +1,9 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useAppStore } from "@/store/appStore";
 import Icon from "@/components/Icon";
+import { cn } from "@/lib/cn";
 
 export default function ClassesIndex() {
   const navigate = useNavigate();
@@ -52,6 +54,12 @@ export default function ClassesIndex() {
     setEditError(null);
   }
 
+  function startRename(id: string, current: string) {
+    setEditingId(id);
+    setEditValue(current);
+    setEditError(null);
+  }
+
   return (
     <div className="mx-auto max-w-3xl p-6">
       <h1 className="mb-1 text-2xl font-bold tracking-tight">Your classes</h1>
@@ -72,7 +80,7 @@ export default function ClassesIndex() {
             }}
             onKeyDown={(e) => e.key === "Enter" && handleCreate()}
           />
-          <button className="btn-primary" onClick={handleCreate}>Create</button>
+          <button className="btn-primary whitespace-nowrap" onClick={handleCreate}>Create</button>
         </div>
         {newError && <p className="mt-2 text-xs text-red-600">{newError}</p>}
       </div>
@@ -102,11 +110,11 @@ export default function ClassesIndex() {
                         }
                       }}
                     />
-                    <button className="btn-secondary" onClick={() => handleRename(c.id, c.name)}>
+                    <button className="btn-secondary whitespace-nowrap" onClick={() => handleRename(c.id, c.name)}>
                       Save
                     </button>
                     <button
-                      className="btn-secondary"
+                      className="btn-secondary whitespace-nowrap"
                       onClick={() => {
                         setEditingId(null);
                         setEditError(null);
@@ -118,45 +126,32 @@ export default function ClassesIndex() {
                   {editError && <p className="mt-2 text-xs text-red-600">{editError}</p>}
                 </div>
               ) : (
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-base font-medium">{c.name}</div>
-                    <div className="text-xs text-ink-muted">
-                      {c.students.length} students · {c.room.desks.length} desks · {c.arrangements.length} saved arrangements
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-base font-medium">{c.name}</div>
+                    <div className="truncate text-xs text-ink-muted">
+                      {pluralise(c.students.length, "student")} · {pluralise(c.room.desks.length, "desk")} ·{" "}
+                      {pluralise(c.arrangements.length, "arrangement")}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Link to={`/classes/${c.id}/roster`} className="btn-secondary">Roster</Link>
-                    <Link to={`/classes/${c.id}/room`} className="btn-primary">Open room</Link>
-                    <button
-                      className="btn-secondary"
-                      onClick={() => {
-                        setEditingId(c.id);
-                        setEditValue(c.name);
-                        setEditError(null);
-                      }}
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Link
+                      to={`/classes/${c.id}/room`}
+                      className="btn-primary whitespace-nowrap"
                     >
-                      Rename
-                    </button>
-                    <button
-                      className="btn-secondary"
-                      onClick={() => {
+                      Open room
+                    </Link>
+                    <ClassMenu
+                      onRoster={() => navigate(`/classes/${c.id}/roster`)}
+                      onRename={() => startRename(c.id, c.name)}
+                      onDuplicate={() => {
                         const newId = duplicateClass(c.id);
                         if (newId) navigate(`/classes/${newId}/roster`);
                       }}
-                      title="Create a copy with the same students, room, and history"
-                    >
-                      <Icon name="copy" size={14} />
-                      Duplicate
-                    </button>
-                    <button
-                      className="btn-danger"
-                      onClick={() => {
+                      onDelete={() => {
                         if (confirm(`Delete "${c.name}"? This cannot be undone.`)) deleteClass(c.id);
                       }}
-                    >
-                      Delete
-                    </button>
+                    />
                   </div>
                 </div>
               )}
@@ -165,5 +160,69 @@ export default function ClassesIndex() {
         </ul>
       )}
     </div>
+  );
+}
+
+function pluralise(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
+function ClassMenu({
+  onRoster,
+  onRename,
+  onDuplicate,
+  onDelete,
+}: {
+  onRoster: () => void;
+  onRename: () => void;
+  onDuplicate: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button className="rounded-md border border-slate-300 bg-white p-2 text-ink hover:bg-slate-50" title="More actions">
+          <Icon name="more-horizontal" size={16} />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="end"
+          sideOffset={6}
+          className="z-50 w-40 rounded-md border border-slate-200 bg-white p-1 text-sm shadow-lg"
+        >
+          <MenuItem onSelect={onRoster} icon="users" label="Roster" />
+          <MenuItem onSelect={onRename} icon="edit" label="Rename" />
+          <MenuItem onSelect={onDuplicate} icon="copy" label="Duplicate" />
+          <DropdownMenu.Separator className="my-1 h-px bg-slate-200" />
+          <MenuItem onSelect={onDelete} icon="trash" label="Delete" danger />
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+function MenuItem({
+  onSelect,
+  icon,
+  label,
+  danger = false,
+}: {
+  onSelect: () => void;
+  icon: Parameters<typeof Icon>[0]["name"];
+  label: string;
+  danger?: boolean;
+}) {
+  return (
+    <DropdownMenu.Item
+      className={cn(
+        "flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 outline-none data-[highlighted]:bg-slate-100",
+        danger && "text-red-600 data-[highlighted]:bg-red-50",
+      )}
+      onSelect={onSelect}
+    >
+      <Icon name={icon} size={14} />
+      <span>{label}</span>
+    </DropdownMenu.Item>
   );
 }

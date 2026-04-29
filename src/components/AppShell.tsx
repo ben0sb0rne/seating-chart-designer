@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useMatch, useParams } from "react-router-dom";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useAppStore } from "@/store/appStore";
+import { exportStateToFile, readStateFromFile } from "@/lib/io";
 import { cn } from "@/lib/cn";
-import ImportExportMenu from "@/components/ImportExportMenu";
 import HelpDialog from "@/components/HelpDialog";
 import Icon from "@/components/Icon";
 
@@ -32,17 +33,30 @@ export default function AppShell() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // "?" anywhere opens the help dialog.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+      if (e.key === "?" || (e.shiftKey && e.key === "/")) {
+        e.preventDefault();
+        setHelpOpen(true);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <div className="flex h-full flex-col">
       <header className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-4 py-2.5 shadow-topbar">
         <div className="flex min-w-0 items-center gap-3">
           <Link
             to="/"
-            className="flex items-center gap-1.5 rounded px-1 text-sm font-semibold tracking-tight text-ink hover:text-primary"
+            className="rounded px-1 text-sm font-semibold tracking-tight text-ink hover:text-primary"
             title="Back to all classes"
           >
-            <Icon name="home" size={14} />
-            <span className="hidden sm:inline">Seating Chart Designer</span>
+            Seating Chart Designer
           </Link>
           {isClassRoute && klass && (
             <>
@@ -58,23 +72,103 @@ export default function AppShell() {
             </>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            className="btn-secondary"
-            onClick={() => setHelpOpen(true)}
-            title="Keyboard shortcuts"
-          >
-            <Icon name="help-circle" size={14} />
-            <span className="hidden md:inline">Help</span>
-          </button>
-          <ImportExportMenu />
-        </div>
+        <TopbarMenu onOpenHelp={() => setHelpOpen(true)} />
       </header>
       <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <Outlet />
       </main>
       <HelpDialog open={helpOpen} onOpenChange={setHelpOpen} />
     </div>
+  );
+}
+
+function TopbarMenu({ onOpenHelp }: { onOpenHelp: () => void }) {
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function exportNow() {
+    const { classes, activeClassId, schemaVersion } = useAppStore.getState();
+    exportStateToFile({ classes, activeClassId, schemaVersion });
+  }
+
+  const handleImport: React.ChangeEventHandler<HTMLInputElement> = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const { state, warnings } = await readStateFromFile(file);
+      const replace = confirm(
+        `Import "${file.name}"?\n\n` +
+          `${state.classes.length} class${state.classes.length === 1 ? "" : "es"}.\n\n` +
+          `OK = Replace all current data.\nCancel = Merge (add to current data).` +
+          (warnings.length ? `\n\nWarnings:\n- ${warnings.join("\n- ")}` : ""),
+      );
+      const store = useAppStore.getState();
+      if (replace) {
+        store.replaceState(state);
+      } else {
+        store.replaceState({
+          classes: [...store.classes, ...state.classes],
+          activeClassId: store.activeClassId ?? state.activeClassId,
+          schemaVersion: store.schemaVersion,
+        });
+      }
+    } catch (err) {
+      alert(`Import failed: ${(err as Error).message}`);
+    } finally {
+      if (fileRef.current) fileRef.current.value = "";
+    }
+  };
+
+  return (
+    <>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={handleImport}
+      />
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger asChild>
+          <button
+            className="rounded-md border border-slate-300 bg-white p-2 text-ink hover:bg-slate-50"
+            title="Menu"
+          >
+            <Icon name="more-horizontal" size={16} />
+          </button>
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content
+            align="end"
+            sideOffset={6}
+            className="z-50 w-44 rounded-md border border-slate-200 bg-white p-1 text-sm shadow-lg"
+          >
+            <DropdownMenu.Item
+              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 outline-none data-[highlighted]:bg-slate-100"
+              onSelect={onOpenHelp}
+            >
+              <Icon name="help-circle" size={14} />
+              <span>Help</span>
+              <span className="ml-auto text-xs text-ink-muted">?</span>
+            </DropdownMenu.Item>
+            <DropdownMenu.Separator className="my-1 h-px bg-slate-200" />
+            <DropdownMenu.Item
+              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 outline-none data-[highlighted]:bg-slate-100"
+              onSelect={() => fileRef.current?.click()}
+            >
+              <Icon name="upload" size={14} />
+              <span>Import…</span>
+            </DropdownMenu.Item>
+            <DropdownMenu.Item
+              className="flex cursor-pointer items-center gap-2 rounded px-2 py-1.5 outline-none data-[highlighted]:bg-slate-100"
+              onSelect={exportNow}
+            >
+              <Icon name="download" size={14} />
+              <span>Export…</span>
+            </DropdownMenu.Item>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu.Root>
+    </>
   );
 }
 
