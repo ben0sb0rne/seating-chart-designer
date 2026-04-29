@@ -1,11 +1,19 @@
 import type { Desk, Room, Seat, SeatId } from "@/types";
 
-export const ADJACENCY_DISTANCE = 90; // px ~ "neighboring desk" radius
+/**
+ * How many of each seat's closest other seats count as "neighbors" for
+ * Keep Apart purposes. Plus same-desk seats, which are always neighbors.
+ *
+ * Using a relative measure (K nearest) instead of a fixed pixel distance
+ * keeps "next to each other" meaningful regardless of how tight or spread
+ * the room layout is.
+ */
+export const K_NEAREST = 3;
 
 export interface SeatRef {
   seatId: SeatId;
   deskId: string;
-  x: number;          // world coords
+  x: number;
   y: number;
   isFrontRow: boolean;
 }
@@ -31,8 +39,20 @@ export function transformSeat(desk: Desk, seat: Seat): { x: number; y: number } 
   };
 }
 
-/** Build the set of unordered adjacent seat-pairs for the current room. */
-export function adjacencyPairs(room: Room, distance = ADJACENCY_DISTANCE): Array<[SeatId, SeatId]> {
+/**
+ * Build the unordered set of adjacent seat-pairs for the current room.
+ *
+ * Two seats are adjacent if EITHER:
+ * - they belong to the same multi-seat desk (always), OR
+ * - one of them is among the other's K closest seats (by world-space
+ *   Euclidean distance). The relation is symmetric: we take A and B as
+ *   adjacent if A is in B's K-nearest **or** B is in A's K-nearest.
+ *
+ * This means the constraint scales naturally with desk density. In a tight
+ * grid your "neighbors" really are right beside you; in a spread room your
+ * "neighbors" are still your closest, even if absolute distances are large.
+ */
+export function adjacencyPairs(room: Room, k: number = K_NEAREST): Array<[SeatId, SeatId]> {
   const seats = roomSeats(room);
   const seatsByDesk = new Map<string, SeatRef[]>();
   for (const s of seats) {
@@ -41,38 +61,39 @@ export function adjacencyPairs(room: Room, distance = ADJACENCY_DISTANCE): Array
     seatsByDesk.set(s.deskId, arr);
   }
 
-  const pairs: Array<[SeatId, SeatId]> = [];
   const seen = new Set<string>();
+  const pairs: Array<[SeatId, SeatId]> = [];
 
-  // 1. Same-desk seats are always adjacent (multi-seat desks).
+  function addPair(a: SeatId, b: SeatId) {
+    const key = pairKey(a, b);
+    if (seen.has(key)) return;
+    seen.add(key);
+    pairs.push([a, b]);
+  }
+
+  // 1. Same-desk seats are always adjacent.
   for (const arr of seatsByDesk.values()) {
     for (let i = 0; i < arr.length; i++) {
       for (let j = i + 1; j < arr.length; j++) {
-        const key = pairKey(arr[i].seatId, arr[j].seatId);
-        if (!seen.has(key)) {
-          seen.add(key);
-          pairs.push([arr[i].seatId, arr[j].seatId]);
-        }
+        addPair(arr[i].seatId, arr[j].seatId);
       }
     }
   }
 
-  // 2. Cross-desk seats within distance threshold.
-  for (let i = 0; i < seats.length; i++) {
-    for (let j = i + 1; j < seats.length; j++) {
-      const a = seats[i];
-      const b = seats[j];
-      if (a.deskId === b.deskId) continue;
-      const dx = a.x - b.x;
-      const dy = a.y - b.y;
-      if (dx * dx + dy * dy <= distance * distance) {
-        const key = pairKey(a.seatId, b.seatId);
-        if (!seen.has(key)) {
-          seen.add(key);
-          pairs.push([a.seatId, b.seatId]);
-        }
-      }
-    }
+  // 2. K-nearest from each seat's perspective. Because we add pairs in both
+  // walks (any pair where A∈knn(B) OR B∈knn(A)), the relation ends up
+  // symmetric even though K-nearest by itself isn't.
+  for (const seat of seats) {
+    const ranked = seats
+      .filter((other) => other.seatId !== seat.seatId)
+      .map((other) => {
+        const dx = seat.x - other.x;
+        const dy = seat.y - other.y;
+        return { id: other.seatId, distSq: dx * dx + dy * dy };
+      })
+      .sort((a, b) => a.distSq - b.distSq)
+      .slice(0, k);
+    for (const { id } of ranked) addPair(seat.seatId, id);
   }
 
   return pairs;

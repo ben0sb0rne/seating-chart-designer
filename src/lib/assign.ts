@@ -44,6 +44,11 @@ export function assign(input: AssignInput): AssignResult {
     adjBySeat.get(b)!.add(a);
   }
 
+  // Lookup table for the soft "push apart" score below — given a seat id,
+  // where is that seat in the room?
+  const seatPosBy = new Map<SeatId, { x: number; y: number }>();
+  for (const s of seatRefs) seatPosBy.set(s.seatId, { x: s.x, y: s.y });
+
   const keepApart = new Map<StudentId, Set<StudentId>>();
   for (const s of students) keepApart.set(s.id, new Set(s.keepApart));
 
@@ -77,6 +82,8 @@ export function assign(input: AssignInput): AssignResult {
     const constrained = student.needsFrontRow ? open.filter((s) => frontRowSeatIds.has(s)) : open;
 
     // Score: lower = better. Prefer not-front-row seats for non-front-row students (saves them for who needs them).
+    const apart = keepApart.get(student.id) ?? new Set();
+
     return constrained
       .map((seat) => {
         let score = 0;
@@ -90,6 +97,25 @@ export function assign(input: AssignInput): AssignResult {
         for (const n of neighbors) {
           const occupant = seatTakenBy.get(n);
           if (occupant) score += (pairWeight.get(spairKey(student.id, occupant)) ?? 0) * 100;
+        }
+        // Soft "push apart" pass: even when a seat is technically not
+        // adjacent to a Keep Apart partner, prefer placements that put them
+        // physically further away. The penalty falls linearly to zero at
+        // ~600 px so it only nudges decisions when there's a meaningful
+        // closer-vs-further choice; max ~150 score units, comparable to the
+        // recency term so neither dominates.
+        const candidatePos = seatPosBy.get(seat);
+        if (candidatePos) {
+          for (const partnerId of apart) {
+            const partnerSeatId = studentSeat.get(partnerId);
+            if (!partnerSeatId) continue;
+            const partnerPos = seatPosBy.get(partnerSeatId);
+            if (!partnerPos) continue;
+            const dx = candidatePos.x - partnerPos.x;
+            const dy = candidatePos.y - partnerPos.y;
+            const dist = Math.hypot(dx, dy);
+            if (dist < 600) score += (600 - dist) * 0.25;
+          }
         }
         // Light randomness for variety on equal scores.
         score += Math.random() * 0.1;

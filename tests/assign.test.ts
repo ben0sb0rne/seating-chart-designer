@@ -101,8 +101,17 @@ describe("assign", () => {
     const s1 = seat({ offsetX: 12, offsetY: 20 });
     const s2 = seat({ offsetX: 38, offsetY: 20 });
     const s3 = seat();
-    // Two-seat multi-rect + a far-away single desk.
-    const r = room([multiDesk(0, 0, [s1, s2], 1, 2), singleDesk(500, 500, s3)]);
+    const s4 = seat();
+    const s5 = seat();
+    // Two-seat multi-rect plus three single desks spread far enough apart
+    // that under K-nearest adjacency, the two ends of the room (s1/s2 vs s5)
+    // are NOT mutually adjacent — leaving room for a Keep Apart pair.
+    const r = room([
+      multiDesk(0, 0, [s1, s2], 1, 2),
+      singleDesk(500, 500, s3),
+      singleDesk(1000, 1000, s4),
+      singleDesk(1500, 1500, s5),
+    ]);
     const a = student("A");
     const b = student("B");
     a.keepApart = [b.id];
@@ -113,6 +122,7 @@ describe("assign", () => {
     if (result.ok) {
       const seatA = Object.entries(result.assignments).find(([, id]) => id === a.id)?.[0];
       const seatB = Object.entries(result.assignments).find(([, id]) => id === b.id)?.[0];
+      // Same-desk seats are always neighbors, so A and B should never both end up there.
       const sameDesk = (seatA === s1.id && seatB === s2.id) || (seatA === s2.id && seatB === s1.id);
       expect(sameDesk).toBe(false);
     }
