@@ -3,17 +3,32 @@ import { useParams } from "react-router-dom";
 import type Konva from "konva";
 import { useAppStore } from "@/store/appStore";
 import RoomStage from "@/components/canvas/RoomStage";
-import DeskPalette from "@/components/canvas/DeskPalette";
+import DeskPalette, { type PaletteDragType } from "@/components/canvas/DeskPalette";
 import AssignmentPanel from "@/components/canvas/AssignmentPanel";
 import MultiShapeParamsDialog from "@/components/designer/MultiShapeParamsDialog";
 import { cloneDeskWithFreshIds, defaultParamsFor, layoutDesk, makeDesk, type ShapeParams } from "@/lib/shapes";
 import { cloneFurnitureWithFreshId, makeFurniture } from "@/lib/furniture";
 import { assign } from "@/lib/assign";
 import { exportStageAsPng } from "@/lib/exportPng";
+import { pageToRoom } from "@/lib/canvasCoords";
 import Icon from "@/components/Icon";
 import type { Desk, DeskKind, Furniture, FurnitureKind, SeatId, StudentId } from "@/types";
 
 const PASTE_OFFSET = 20;
+/** Mouse must move this many pixels after mousedown before a palette drag begins. */
+const PALETTE_DRAG_THRESHOLD = 5;
+
+interface PaletteDragSession {
+  kind: DeskKind | FurnitureKind;
+  type: PaletteDragType;
+  startX: number;
+  startY: number;
+  /** Live cursor position while dragging. */
+  x: number;
+  y: number;
+  /** Once the threshold is crossed, this flips to true and the ghost shows. */
+  active: boolean;
+}
 
 export default function RoomDesigner() {
   const { id } = useParams();
@@ -34,10 +49,11 @@ export default function RoomDesigner() {
 
   const stageRef = useRef<Konva.Stage>(null);
   const [selectedItemIds, setSelectedItemIds] = useState<string[]>([]);
-  const [paramsDialog, setParamsDialog] = useState<{ open: boolean; kind: DeskKind | null }>({
-    open: false,
-    kind: null,
-  });
+  const [paramsDialog, setParamsDialog] = useState<{
+    open: boolean;
+    kind: DeskKind | null;
+    dropPoint: { x: number; y: number } | null;
+  }>({ open: false, kind: null, dropPoint: null });
   const [warning, setWarning] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [clipboard, setClipboard] = useState<{ desks: Desk[]; furniture: Furniture[] }>({
@@ -48,17 +64,14 @@ export default function RoomDesigner() {
   const [showGrid, setShowGrid] = useState(false);
   const [paletteCollapsed, setPaletteCollapsed] = useState(false);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
+  const [paletteDrag, setPaletteDrag] = useState<PaletteDragSession | null>(null);
 
-  // Live working assignments now live on the class itself.
   const assignments = klass?.currentAssignments ?? {};
 
   useEffect(() => {
     setSelectedItemIds([]);
     setWarning(null);
     if (!klass) return;
-    // Backwards-compat: a "Restore" link from the legacy History flow may
-    // have written to sessionStorage; honour it but otherwise leave the
-    // class's currentAssignments alone.
     const restoreId = sessionStorage.getItem(`restore:${klass.id}`);
     if (restoreId) {
       sessionStorage.removeItem(`restore:${klass.id}`);
@@ -67,6 +80,46 @@ export default function RoomDesigner() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  // Window-level listeners for palette drag (mousemove tracks cursor + crosses
+  // the threshold; mouseup either drops on the canvas or cancels).
+  useEffect(() => {
+    if (!paletteDrag) return;
+    function onMove(e: MouseEvent) {
+      setPaletteDrag((prev) => {
+        if (!prev) return null;
+        const dx = e.clientX - prev.startX;
+        const dy = e.clientY - prev.startY;
+        const active = prev.active || Math.hypot(dx, dy) > PALETTE_DRAG_THRESHOLD;
+        return { ...prev, x: e.clientX, y: e.clientY, active };
+      });
+    }
+    function onUp(e: MouseEvent) {
+      const session = paletteDrag;
+      setPaletteDrag(null);
+      // If the drag never activated, this was a plain click — let the
+      // button's own onClick handle it (no-op here).
+      if (!session || !session.active) return;
+      const room = pageToRoom(stageRef.current, e.clientX, e.clientY);
+      if (!room || !klass) return;
+      if (session.type === "single-desk") {
+        placeDeskAtPoint(session.kind as DeskKind, undefined, room.x, room.y);
+      } else if (session.type === "furniture") {
+        placeFurnitureAtPoint(session.kind as FurnitureKind, room.x, room.y);
+      } else if (session.type === "multi-desk") {
+        // Multi-desk needs params first — open the dialog with the drop point;
+        // confirm will place there.
+        setParamsDialog({ open: true, kind: session.kind as DeskKind, dropPoint: room });
+      }
+    }
+    window.addEventListener("mousemove", onMove);
+    window.addEventListener("mouseup", onUp);
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      window.removeEventListener("mouseup", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paletteDrag, klass]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -144,10 +197,38 @@ export default function RoomDesigner() {
     addDesk(klass.id, makeDesk(kind, params, x, y));
   }
 
-  function handlePlaceSingle(kind: DeskKind) { placeDeskAtCenter(kind, undefined); }
-  function handleOpenMulti(kind: DeskKind) { setParamsDialog({ open: true, kind }); }
-  function handleConfirmMulti(kind: DeskKind, params: ShapeParams) {
-    placeDeskAtCenter(kind, params ?? defaultParamsFor(kind));
+  function placeDeskAtPoint(kind: DeskKind, params: ShapeParams, roomX: number, roomY: number) {
+    if (!klass) return;
+    const layout = layoutDesk(kind, params);
+    const x = Math.round((roomX - layout.width / 2) / 10) * 10;
+    const y = Math.round((roomY - layout.height / 2) / 10) * 10;
+    addDesk(klass.id, makeDesk(kind, params, x, y));
+  }
+
+  function placeFurnitureAtPoint(kind: FurnitureKind, roomX: number, roomY: number) {
+    if (!klass) return;
+    const item = makeFurniture(kind, 0, 0);
+    item.x = Math.round((roomX - item.width / 2) / 10) * 10;
+    item.y = Math.round((roomY - item.height / 2) / 10) * 10;
+    addFurniture(klass.id, item);
+  }
+
+  function handlePlaceSingle(kind: DeskKind) {
+    placeDeskAtCenter(kind, undefined);
+  }
+
+  function handleOpenMulti(kind: DeskKind) {
+    setParamsDialog({ open: true, kind, dropPoint: null });
+  }
+
+  function handleConfirmMulti(
+    kind: DeskKind,
+    params: ShapeParams,
+    dropPoint: { x: number; y: number } | null,
+  ) {
+    const finalParams = params ?? defaultParamsFor(kind);
+    if (dropPoint) placeDeskAtPoint(kind, finalParams, dropPoint.x, dropPoint.y);
+    else placeDeskAtCenter(kind, finalParams);
   }
 
   function handlePlaceFurniture(kind: FurnitureKind) {
@@ -158,6 +239,23 @@ export default function RoomDesigner() {
     item.x = Math.round(cx / 10) * 10;
     item.y = Math.round(cy / 10) * 10;
     addFurniture(klass.id, item);
+  }
+
+  function handlePaletteDragStart(
+    kind: DeskKind | FurnitureKind,
+    type: PaletteDragType,
+    clientX: number,
+    clientY: number,
+  ) {
+    setPaletteDrag({
+      kind,
+      type,
+      startX: clientX,
+      startY: clientY,
+      x: clientX,
+      y: clientY,
+      active: false,
+    });
   }
 
   function handleAlignVertical() {
@@ -222,8 +320,6 @@ export default function RoomDesigner() {
     if (!klass) return;
     setWarning(null);
     setInfo(null);
-
-    // If there's already a non-empty arrangement, ask before overwriting.
     const occupied = Object.keys(klass.currentAssignments ?? {}).length;
     if (occupied > 0) {
       const ok = confirm(
@@ -231,15 +327,12 @@ export default function RoomDesigner() {
       );
       if (!ok) return;
     }
-
     const result = assign({ room: klass.room, students: klass.students, history: klass.arrangements });
     if (!result.ok) {
       setWarning(result.reason);
       return;
     }
     setAssignmentsStore(klass.id, result.assignments);
-
-    // Soft empty-seats notice.
     const totalSeats = klass.room.desks.reduce((n, d) => n + d.seats.length, 0);
     const emptySeats = totalSeats - Object.keys(result.assignments).length;
     if (emptySeats > 0) {
@@ -284,6 +377,7 @@ export default function RoomDesigner() {
         onPlaceSingle={handlePlaceSingle}
         onOpenMulti={handleOpenMulti}
         onPlaceFurniture={handlePlaceFurniture}
+        onPaletteDragStart={handlePaletteDragStart}
         room={klass.room}
         onUpdateRoom={(patch) => updateRoom(klass.id, patch)}
         selectionSize={selectedItemIds.length}
@@ -339,10 +433,21 @@ export default function RoomDesigner() {
       />
       <MultiShapeParamsDialog
         open={paramsDialog.open}
-        onOpenChange={(open) => setParamsDialog((p) => ({ ...p, open }))}
+        onOpenChange={(open) =>
+          setParamsDialog((p) => (open ? { ...p, open } : { open: false, kind: null, dropPoint: null }))
+        }
         kind={paramsDialog.kind}
+        dropPoint={paramsDialog.dropPoint}
         onConfirm={handleConfirmMulti}
       />
+      {paletteDrag?.active && (
+        <div
+          className="pointer-events-none fixed z-50 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-ink shadow-md"
+          style={{ left: paletteDrag.x + 12, top: paletteDrag.y + 12 }}
+        >
+          Drop on the canvas to place
+        </div>
+      )}
     </div>
   );
 }

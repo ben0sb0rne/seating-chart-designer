@@ -4,12 +4,21 @@ import { cn } from "@/lib/cn";
 import Icon from "@/components/Icon";
 import { FURNITURE_DEFAULTS, FURNITURE_KINDS, furnitureLabel } from "@/lib/furniture";
 
+export type PaletteDragType = "single-desk" | "multi-desk" | "furniture";
+
 interface Props {
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onPlaceSingle: (kind: DeskKind) => void;
   onOpenMulti: (kind: DeskKind) => void;
   onPlaceFurniture: (kind: FurnitureKind) => void;
+  /** Tells RoomDesigner that the user has started a potential drag from a palette item. */
+  onPaletteDragStart: (
+    kind: DeskKind | FurnitureKind,
+    type: PaletteDragType,
+    clientX: number,
+    clientY: number,
+  ) => void;
   room: Room;
   onUpdateRoom: (patch: Partial<Room>) => void;
   selectionSize: number;
@@ -48,6 +57,7 @@ export default function DeskPalette({
   onPlaceSingle,
   onOpenMulti,
   onPlaceFurniture,
+  onPaletteDragStart,
   room,
   onUpdateRoom,
   selectionSize,
@@ -60,7 +70,11 @@ export default function DeskPalette({
   showGrid,
   onToggleGrid,
 }: Props) {
+  const [singleOpen, setSingleOpen] = useState(true);
+  const [multiOpen, setMultiOpen] = useState(true);
+  const [furnitureOpen, setFurnitureOpen] = useState(true);
   const [roomOptsOpen, setRoomOptsOpen] = useState(false);
+
   const canAlign = selectionSize >= 2 && !locked;
   const canDistribute = selectionSize >= 3 && !locked;
   const isDefaultRoom = room.width === DEFAULT_ROOM_W && room.height === DEFAULT_ROOM_H;
@@ -93,54 +107,76 @@ export default function DeskPalette({
       </div>
 
       <div className="flex-1 overflow-auto p-3">
-        <div className="label mb-2">Single-student</div>
-        <ul className="mb-5 space-y-1">
-          {SINGLE_ITEMS.map((it) => (
-            <li key={it.kind}>
-              <button
-                className="btn-secondary w-full justify-start"
-                onClick={() => onPlaceSingle(it.kind)}
-                title="Click to add to room"
-              >
-                <ShapeIcon kind={it.kind} />
-                <span className="ml-2 truncate">{it.label}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <SectionHeader label="Single-student" open={singleOpen} onToggle={() => setSingleOpen((o) => !o)} />
+        {singleOpen && (
+          <ul className="mb-4 space-y-1">
+            {SINGLE_ITEMS.map((it) => (
+              <li key={it.kind}>
+                <button
+                  className="btn-secondary w-full justify-start"
+                  onClick={() => onPlaceSingle(it.kind)}
+                  onMouseDown={(e) => {
+                    if (e.button !== 0) return;
+                    onPaletteDragStart(it.kind, "single-desk", e.clientX, e.clientY);
+                  }}
+                  title="Click to place at center, or drag onto the canvas"
+                >
+                  <ShapeIcon kind={it.kind} />
+                  <span className="ml-2 truncate">{it.label}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
 
-        <div className="label mb-2">Multi-student</div>
-        <ul className="mb-5 space-y-1">
-          {MULTI_ITEMS.map((it) => (
-            <li key={it.kind}>
-              <button
-                className="btn-secondary w-full justify-start"
-                onClick={() => onOpenMulti(it.kind)}
-                title="Click to configure and add"
-              >
-                <ShapeIcon kind={it.kind} />
-                <span className="ml-2 flex-1 truncate text-left">{it.label}</span>
-                <Icon name="chevron-right" size={12} className="ml-1 text-ink-muted" />
-              </button>
-            </li>
-          ))}
-        </ul>
+        <SectionHeader label="Multi-student" open={multiOpen} onToggle={() => setMultiOpen((o) => !o)} />
+        {multiOpen && (
+          <ul className="mb-4 space-y-1">
+            {MULTI_ITEMS.map((it) => (
+              <li key={it.kind}>
+                <button
+                  className="btn-secondary w-full justify-start"
+                  onClick={() => onOpenMulti(it.kind)}
+                  onMouseDown={(e) => {
+                    if (e.button !== 0) return;
+                    onPaletteDragStart(it.kind, "multi-desk", e.clientX, e.clientY);
+                  }}
+                  title="Click to configure and add, or drag onto the canvas"
+                >
+                  <ShapeIcon kind={it.kind} />
+                  <span className="ml-2 flex-1 truncate text-left">{it.label}</span>
+                  <Icon name="chevron-right" size={12} className="ml-1 text-ink-muted" />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
 
-        <div className="label mb-2">Furniture</div>
-        <ul className="mb-5 space-y-1">
-          {FURNITURE_KINDS.map((kind) => (
-            <li key={kind}>
-              <button
-                className="btn-secondary w-full justify-start"
-                onClick={() => onPlaceFurniture(kind)}
-                title="Click to add to room"
-              >
-                <FurnitureIcon kind={kind} />
-                <span className="ml-2 truncate">{furnitureLabel(kind)}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
+        <SectionHeader
+          label="Furniture"
+          open={furnitureOpen}
+          onToggle={() => setFurnitureOpen((o) => !o)}
+        />
+        {furnitureOpen && (
+          <ul className="mb-4 space-y-1">
+            {FURNITURE_KINDS.map((kind) => (
+              <li key={kind}>
+                <button
+                  className="btn-secondary w-full justify-start"
+                  onClick={() => onPlaceFurniture(kind)}
+                  onMouseDown={(e) => {
+                    if (e.button !== 0) return;
+                    onPaletteDragStart(kind, "furniture", e.clientX, e.clientY);
+                  }}
+                  title="Click to place at center, or drag onto the canvas"
+                >
+                  <FurnitureIcon kind={kind} />
+                  <span className="ml-2 truncate">{furnitureLabel(kind)}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
 
         <div className="mb-2 flex items-center justify-between">
           <span className="label">Arrange selected</span>
@@ -166,9 +202,9 @@ export default function DeskPalette({
             <span className="text-xs">Dist H</span>
           </button>
         </div>
-        <p className="mb-5 text-[10px] text-ink-muted">Distribute needs 3+ items selected.</p>
+        <p className="mb-4 text-[10px] text-ink-muted">Distribute needs 3+ items selected.</p>
 
-        <div className="mb-5 grid grid-cols-2 gap-1">
+        <div className="mb-4 grid grid-cols-2 gap-1">
           <button
             className={cn("btn-secondary justify-center", locked && "border-ink bg-ink text-white hover:bg-ink")}
             onClick={onToggleLocked}
@@ -223,6 +259,26 @@ export default function DeskPalette({
         )}
       </div>
     </aside>
+  );
+}
+
+function SectionHeader({
+  label,
+  open,
+  onToggle,
+}: {
+  label: string;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      className="mb-2 flex w-full items-center justify-between rounded px-1 py-0.5 text-xs font-semibold uppercase tracking-wide text-ink-muted hover:bg-slate-50"
+      onClick={onToggle}
+    >
+      <span>{label}</span>
+      <Icon name={open ? "chevron-down" : "chevron-right"} size={12} />
+    </button>
   );
 }
 
@@ -333,20 +389,26 @@ function ShapeIcon({ kind }: { kind: DeskKind }) {
   const size = 18;
   switch (kind) {
     case "single-rect":
+      // Landscape rectangle (~1.7:1) with rounded corners and a single seat dot.
       return (
         <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
-          <rect x="1" y="6" width="18" height="8" fill={fill} stroke={stroke} rx="1.5" />
+          <rect x="1.5" y="6" width="17" height="9" fill={fill} stroke={stroke} strokeWidth="1.2" rx="1.5" />
+          <circle cx="10" cy="10.5" r="1.4" fill="#ffffff" stroke={stroke} strokeWidth="0.6" />
         </svg>
       );
     case "single-triangle":
+      // Wider-than-tall isoceles triangle with rounded joins, single seat dot near the centroid.
       return (
-        <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden strokeLinejoin="round" strokeLinecap="round">
+        <svg width={size} height={size} viewBox="0 0 20 20" aria-hidden>
           <path
-            d="M 10 6 Q 10 6 11 6.5 L 18 13 Q 18.5 14 17.5 14.5 L 2.5 14.5 Q 1.5 14 2 13 L 9 6.5 Q 10 6 10 6 Z"
+            d="M 10 4 L 17.5 16 L 2.5 16 Z"
             fill={fill}
             stroke={stroke}
             strokeWidth="1.2"
+            strokeLinejoin="round"
+            strokeLinecap="round"
           />
+          <circle cx="10" cy="12" r="1.4" fill="#ffffff" stroke={stroke} strokeWidth="0.6" />
         </svg>
       );
     case "multi-rect":

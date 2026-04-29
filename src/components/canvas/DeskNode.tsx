@@ -71,11 +71,22 @@ export default function DeskNode({
       draggable={draggable}
       onMouseDown={(e) => {
         e.cancelBubble = true;
-        onSelect(e.evt.shiftKey);
+        // Don't collapse a multi-selection on plain mousedown — the user
+        // might be about to drag the whole group. We only force a fresh
+        // single-select when the item isn't already in the selection.
+        if (e.evt.shiftKey) onSelect(true);
+        else if (!selected) onSelect(false);
       }}
       onTouchStart={(e) => {
         e.cancelBubble = true;
-        onSelect(false);
+        if (!selected) onSelect(false);
+      }}
+      onClick={(e) => {
+        e.cancelBubble = true;
+        // If the user clicked (no drag) on a multi-selected item, collapse
+        // the selection down to just this one — the standard design-tool
+        // pattern for "I clicked, I want only this".
+        if (!e.evt.shiftKey && selected) onSelect(false);
       }}
       onContextMenu={(e) => {
         e.evt.preventDefault();

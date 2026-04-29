@@ -14,10 +14,12 @@ interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   kind: DeskKind | null;
-  onConfirm: (kind: DeskKind, params: ShapeParams) => void;
+  /** Optional drop point in room coords. When set, the placed desk lands here instead of room center. */
+  dropPoint?: { x: number; y: number } | null;
+  onConfirm: (kind: DeskKind, params: ShapeParams, dropPoint: { x: number; y: number } | null) => void;
 }
 
-export default function MultiShapeParamsDialog({ open, onOpenChange, kind, onConfirm }: Props) {
+export default function MultiShapeParamsDialog({ open, onOpenChange, kind, dropPoint, onConfirm }: Props) {
   const [rect, setRect] = useState<MultiRectParams>({ rows: 2, cols: 3 });
   const [square, setSquare] = useState<MultiSquareParams>({ perSide: 2 });
   const [circle, setCircle] = useState<MultiCircleParams>({ seatCount: 6 });
@@ -47,7 +49,7 @@ export default function MultiShapeParamsDialog({ open, onOpenChange, kind, onCon
 
   function handleConfirm() {
     if (!kind) return;
-    onConfirm(kind, params);
+    onConfirm(kind, params, dropPoint ?? null);
     onOpenChange(false);
   }
 

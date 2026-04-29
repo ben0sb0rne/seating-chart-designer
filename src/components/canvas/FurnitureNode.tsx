@@ -52,11 +52,19 @@ export default function FurnitureNode({
       draggable={draggable}
       onMouseDown={(e) => {
         e.cancelBubble = true;
-        onSelect(e.evt.shiftKey);
+        // Preserve a multi-selection on mousedown so RoomStage's multi-drag
+        // can record all selected items' starting positions and move the
+        // group together. Collapse on plain click instead (below).
+        if (e.evt.shiftKey) onSelect(true);
+        else if (!selected) onSelect(false);
       }}
       onTouchStart={(e) => {
         e.cancelBubble = true;
-        onSelect(false);
+        if (!selected) onSelect(false);
+      }}
+      onClick={(e) => {
+        e.cancelBubble = true;
+        if (!e.evt.shiftKey && selected) onSelect(false);
       }}
       onDragStart={() => onDragStart(furniture.id)}
       onDragMove={(e) => {
